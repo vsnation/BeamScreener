@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="appicon.svg">
+<title>BeamScreener — BEAM DEX Screener</title>
+<script src="lightweight-charts.standalone.production.js"></script>
+<script src="BeamDappConnector.js"></script>
+<style>
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/inter-400.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/inter-500.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/inter-600.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/inter-700.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/jetbrains-mono-400.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/jetbrains-mono-500.woff2) format('woff2'); }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-tertiary: #1e293b;
+    --bg-card: #151d2e;
+    --bg-hover: #1a2332;
+    --accent: #25c2a0;
+    --accent2: #00d4ff;
+    --text-1: #f8fafc;
+    --text-2: #94a3b8;
+    --text-3: #64748b;
+    --border: #2d3748;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --radius: 8px;
+    --radius-sm: 4px;
+    --font: 'Inter', -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+}
+html, body { background: var(--bg-primary); color: var(--text-1); font-family: var(--font); font-size: 14px; line-height: 1.5; height: 100%; overflow-x: hidden; }
+a { color: var(--accent2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font-family: var(--font); cursor: pointer; border: none; }
+input { font-family: var(--font); }
+table { width: 100%; border-collapse: collapse; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Layout */
+#app { min-height: 100vh; display: flex; flex-direction: column; }
+.container { max-width: 1400px; margin: 0 auto; padding: 0 20px; width: 100%; }
+
+/* Header */
+.header { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 12px 0; position: sticky; top: 0; z-index: 100; }
+.header .container { display: flex; align-items: center; gap: 16px; }
+.logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: var(--accent); white-space: nowrap; cursor: pointer; }
+.logo img { width: 28px; height: 28px; }
+.logo span { font-size: 11px; color: var(--text-3); font-weight: 400; margin-left: -4px; }
+.search-box { flex: 1; max-width: 400px; position: relative; }
+.search-box input { width: 100%; padding: 8px 12px 8px 36px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-1); font-size: 13px; outline: none; transition: border 0.2s; }
+.search-box input:focus { border-color: var(--accent); }
+.search-box::before { content: '\1F50D'; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5; }
+.header-right { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.beam-price { font-family: var(--mono); font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.beam-price b { color: var(--text-1); }
+
+/* Stats Bar */
+.stats-bar { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 10px 0; }
+.stats-bar .container { display: flex; gap: 32px; overflow-x: auto; }
+.stat { white-space: nowrap; }
+.stat-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+
+/* Pairs Table */
+.page { padding: 20px 0; flex: 1; }
+.pairs-table { width: 100%; }
+.pairs-table th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none; }
+.pairs-table th:hover { color: var(--text-2); }
+.pairs-table th.sorted { color: var(--accent); }
+.pairs-table td { padding: 10px 12px; border-bottom: 1px solid rgba(45,55,72,0.4); vertical-align: middle; }
+.pairs-table tr { transition: background 0.15s; cursor: pointer; }
+.pairs-table tbody tr:hover { background: var(--bg-hover); }
+.pair-cell { display: flex; align-items: center; gap: 10px; }
+.pair-icons { display: flex; position: relative; width: 44px; height: 28px; flex-shrink: 0; }
+.pair-icons .icon { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--bg-primary); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; overflow: hidden; background: var(--bg-tertiary); }
+.pair-icons .icon:last-child { position: absolute; left: 16px; }
+.pair-icons img { width: 100%; height: 100%; object-fit: cover; }
+.pair-name { font-weight: 600; font-size: 14px; }
+.pair-name small { color: var(--text-3); font-weight: 400; font-size: 12px; }
+.mono { font-family: var(--mono); }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+.neutral { color: var(--text-3); }
+.txns-cell { font-size: 12px; white-space: nowrap; }
+.txns-cell .positive { font-size: 11px; }
+.txns-cell .negative { font-size: 11px; }
+.sparkline-cell { width: 120px; height: 32px; }
+.sparkline-cell canvas { width: 100%; height: 100%; }
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Pair Detail Page — DexScreener-style layout                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+.detail-layout { display: grid; grid-template-columns: 1fr 320px; gap: 0; min-height: calc(100vh - 130px); max-width: 100%; overflow: hidden; }
+
+/* Left column: chart + trades */
+.detail-left { display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
+
+/* Top bar: pair name + price row */
+.detail-topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+.back-btn { background: none; color: var(--text-2); font-size: 18px; padding: 4px 8px; border-radius: var(--radius-sm); transition: all 0.15s; }
+.back-btn:hover { background: var(--bg-tertiary); color: var(--text-1); }
+.topbar-pair-icons { display: flex; position: relative; width: 48px; height: 32px; flex-shrink: 0; }
+.topbar-pair-icons .icon { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--bg-secondary); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; overflow: hidden; background: var(--bg-tertiary); }
+.topbar-pair-icons .icon:last-child { position: absolute; left: 18px; }
+.topbar-pair-icons img { width: 100%; height: 100%; object-fit: cover; }
+.topbar-title { font-size: 18px; font-weight: 700; }
+.topbar-subtitle { font-size: 11px; color: var(--text-3); }
+
+/* Chart area */
+.chart-container { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); }
+.chart-toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.chart-toolbar .tf-group { display: flex; gap: 2px; }
+.chart-toolbar button { padding: 4px 10px; font-size: 12px; background: transparent; color: var(--text-3); border-radius: var(--radius-sm); transition: all 0.15s; }
+.chart-toolbar button:hover { background: var(--bg-tertiary); color: var(--text-2); }
+.chart-toolbar button.active { background: var(--accent); color: var(--bg-primary); font-weight: 600; }
+.chart-toolbar .separator { width: 1px; height: 20px; background: var(--border); margin: 0 8px; }
+.chart-toolbar .price-toggle { display: flex; gap: 2px; background: var(--bg-tertiary); border-radius: var(--radius-sm); padding: 2px; }
+.chart-toolbar .price-toggle button { padding: 3px 10px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.chart-toolbar .price-toggle button.active { background: var(--accent); color: var(--bg-primary); }
+#chart { flex: 1; min-height: 350px; position: relative; }
+.chart-legend { position: absolute; top: 8px; left: 12px; z-index: 10; pointer-events: none; font-family: var(--mono); font-size: 11px; line-height: 1.6; }
+.chart-legend .legend-title { color: var(--text-2); font-family: var(--font); font-size: 12px; font-weight: 500; }
+.chart-legend .legend-ohlc { color: var(--text-2); }
+.chart-legend .legend-ohlc .lbl { color: var(--text-3); }
+.chart-legend .legend-ohlc .val { color: var(--text-1); margin-right: 6px; }
+.chart-legend .legend-ohlc .chg { font-weight: 600; }
+.chart-legend .legend-vol { color: var(--text-3); }
+.chart-legend .legend-vol .val { color: var(--text-2); }
+
+/* Trades table below chart */
+.trades-panel { border-top: 1px solid var(--border); min-width: 0; max-width: 100%; }
+.trades-panel .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+.trades-panel .tab-bar button { padding: 10px 16px; font-size: 13px; font-weight: 500; background: none; color: var(--text-3); border-bottom: 2px solid transparent; transition: all 0.15s; }
+.trades-panel .tab-bar button.active { color: var(--text-1); border-bottom-color: var(--accent); }
+.trades-panel .tab-bar button:hover { color: var(--text-2); }
+.trades-wrap { max-height: 300px; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.trades-table { width: 100%; }
+.trades-table th { text-align: left; padding: 8px 10px; font-size: 11px; color: var(--text-3); text-transform: uppercase; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-card); z-index: 1; white-space: nowrap; }
+.trades-table td { padding: 6px 10px; font-size: 12px; font-family: var(--mono); border-bottom: 1px solid rgba(45,55,72,0.3); white-space: nowrap; }
+.buy-badge { color: var(--green); font-weight: 600; }
+.sell-badge { color: var(--red); font-weight: 600; }
+
+/* Right sidebar */
+.detail-right { display: flex; flex-direction: column; background: var(--bg-secondary); overflow-y: auto; overflow-x: hidden; min-width: 0; max-width: 100%; }
+.detail-right > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+
+/* Price box at top of sidebar */
+.sidebar-price { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-price .price-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 8px; overflow: hidden; }
+.sidebar-price .price-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; }
+.sidebar-price .price-val { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+.sidebar-price .price-native { font-family: var(--mono); font-size: 13px; color: var(--text-2); }
+
+/* Stats grid in sidebar */
+.sidebar-stats { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-stats .stat-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; gap: 8px; }
+.sidebar-stats .stat-row .lbl { color: var(--text-3); flex-shrink: 0; }
+.sidebar-stats .stat-row .val { font-family: var(--mono); font-weight: 500; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Change badges row */
+.change-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-bottom: 1px solid var(--border); }
+.change-cell { text-align: center; padding: 10px 4px; border-right: 1px solid var(--border); }
+.change-cell:last-child { border-right: none; }
+.change-cell .clbl { font-size: 10px; color: var(--text-3); text-transform: uppercase; margin-bottom: 2px; }
+.change-cell .cval { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+
+/* Txns bar (buy/sell ratio) */
+.txns-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.txns-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); text-transform: uppercase; margin-bottom: 6px; }
+.txns-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+.txns-bar .buy-fill { background: var(--green); }
+.txns-bar .sell-fill { background: var(--red); }
+.txns-counts { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); }
+.txns-counts .buys { color: var(--green); }
+.txns-counts .sells { color: var(--red); }
+
+/* Pool info section */
+.pool-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.pool-section h4 { font-size: 11px; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px; }
+.pool-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 13px; gap: 8px; }
+.pool-row .lbl { color: var(--text-3); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.pool-row .lbl .icon { width: 18px; height: 18px; font-size: 8px; }
+.pool-row .lbl .icon img { width: 100%; height: 100%; }
+.pool-row .val { font-family: var(--mono); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pool-row .val .usd { color: var(--text-3); font-size: 11px; margin-left: 4px; }
+.pool-aid { font-size: 11px; font-family: var(--mono); color: var(--text-3); font-weight: 400; }
+
+/* Pair info section */
+.pair-info-section { padding: 12px 16px; }
+.pair-info-section h4 { font-size: 11px; color: var(--text-3); text-transform: uppercase; margin-bottom: 8px; }
+/* Loading & Empty */
+.loading { text-align: center; padding: 60px 20px; color: var(--text-3); }
+.loading .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 60px 20px; color: var(--text-3); }
+
+/* Responsive */
+@media (max-width: 960px) {
+    .detail-layout { grid-template-columns: 1fr; width: 100%; }
+    .detail-left { border-right: none; width: 100%; }
+    .detail-right { border-top: 1px solid var(--border); width: 100%; }
+}
+@media (max-width: 768px) {
+    .stats-bar .container { gap: 20px; }
+    .search-box { max-width: 200px; }
+    #chart { min-height: 280px; }
+    .hide-mobile { display: none; }
+    .change-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* 640px — Tablet / large phone */
+@media (max-width: 640px) {
+    .container { padding: 0 12px; }
+    .header .container { gap: 10px; }
+    .logo span { display: none; }
+    .search-box { max-width: none; flex: 1; }
+    .search-box input { font-size: 12px; padding: 7px 10px 7px 32px; }
+    .beam-price { font-size: 12px; }
+    .stats-bar .container { gap: 16px; }
+    .stat-value { font-size: 13px; }
+    .stat-label { font-size: 10px; }
+    .hide-tablet { display: none !important; }
+    /* Pairs list table */
+    .pairs-table th { padding: 8px 6px; font-size: 10px; }
+    .pairs-table td { padding: 8px 6px; }
+    .pair-name { font-size: 13px; }
+    .pair-name small { font-size: 11px; }
+    .pair-icons { width: 38px; height: 24px; }
+    .pair-icons .icon { width: 24px; height: 24px; }
+    .pair-icons .icon:last-child { left: 14px; }
+    .pair-cell { gap: 8px; }
+    /* LP detail — topbar */
+    .detail-layout { min-height: calc(100vh - 100px); }
+    .detail-topbar { padding: 10px 12px; gap: 10px; }
+    .topbar-title { font-size: 16px; }
+    .topbar-pair-icons { width: 40px; height: 28px; }
+    .topbar-pair-icons .icon { width: 28px; height: 28px; font-size: 10px; }
+    .topbar-pair-icons .icon:last-child { left: 14px; }
+    /* LP detail — chart */
+    .chart-toolbar { padding: 6px 10px; }
+    .chart-toolbar button { padding: 3px 8px; font-size: 11px; }
+    .chart-toolbar .separator { margin: 0 4px; }
+    .chart-toolbar .price-toggle button { padding: 2px 8px; font-size: 10px; }
+    #chart { min-height: 250px; }
+    .chart-legend { font-size: 10px; }
+    .chart-legend .legend-title { font-size: 11px; }
+    .chart-legend .legend-ohlc .lbl { display: none; }
+    .chart-legend .legend-ohlc .val:nth-child(2),
+    .chart-legend .legend-ohlc .val:nth-child(4),
+    .chart-legend .legend-ohlc .val:nth-child(6) { display: none; }
+    /* LP detail — trades table */
+    .trades-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .trades-table { min-width: 480px; }
+    .trades-table td { font-size: 11px; padding: 5px 8px; white-space: nowrap; }
+    .trades-table th { padding: 6px 8px; font-size: 10px; white-space: nowrap; }
+    .trades-panel .tab-bar button { padding: 8px 12px; font-size: 12px; }
+    /* LP detail — sidebar */
+    .sidebar-price { padding: 12px; }
+    .sidebar-price .price-row { flex-wrap: wrap; }
+    .sidebar-price .price-val { font-size: 16px; }
+    .sidebar-price .price-native { font-size: 12px; }
+    .sidebar-stats { padding: 10px 12px; }
+    .sidebar-stats .stat-row { font-size: 12px; }
+    .change-cell { padding: 8px 4px; }
+    .change-cell .cval { font-size: 12px; }
+    .txns-section { padding: 10px 12px; }
+    .txns-counts { font-size: 11px; }
+    .pool-section { padding: 10px 12px; }
+    .pool-row { font-size: 12px; flex-wrap: wrap; }
+    .pool-row .val { white-space: normal; overflow: visible; text-overflow: unset; }
+    .pool-row .val .usd { font-size: 10px; display: block; }
+    .pair-info-section { padding: 10px 12px; }
+    .pair-info-section .pool-row { font-size: 12px; }
+    .pair-info-section .pool-row .val { font-size: 11px; word-break: break-all; }
+    /* LP detail — swap */
+    .swap-panel { padding: 12px; }
+    .swap-panel h4 { font-size: 11px; margin-bottom: 10px; }
+    .swap-box { padding: 10px; }
+    .swap-input { font-size: 18px; }
+    .swap-sym { font-size: 12px; }
+    .swap-aid { font-size: 9px; }
+    .swap-info-row { font-size: 11px; }
+    .swap-info-row span:last-child { font-size: 11px; }
+}
+
+/* 480px — Phone */
+@media (max-width: 480px) {
+    .header { padding: 8px 0; }
+    .header .container { gap: 8px; }
+    .logo { font-size: 0; gap: 0; }
+    .logo img { width: 28px; height: 28px; }
+    .search-box input { font-size: 12px; padding: 6px 8px 6px 30px; }
+    .search-box::before { font-size: 12px; left: 8px; }
+    .beam-price { font-size: 11px; gap: 4px; }
+    .stats-bar { padding: 8px 0; }
+    .stats-bar .container { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; overflow-x: visible; }
+    .stat { white-space: normal; }
+    .hide-sm { display: none !important; }
+    .pairs-table th { padding: 6px 4px; }
+    .pairs-table td { padding: 6px 4px; font-size: 12px; }
+    .pair-name { font-size: 12px; }
+    .pair-name small { font-size: 10px; }
+    .pair-icons { width: 34px; height: 22px; }
+    .pair-icons .icon { width: 22px; height: 22px; font-size: 8px; }
+    .pair-icons .icon:last-child { left: 12px; }
+    .pair-cell { gap: 6px; }
+    .topbar-pair-icons { width: 40px; height: 28px; }
+    .topbar-pair-icons .icon { width: 28px; height: 28px; }
+    .topbar-pair-icons .icon:last-child { left: 14px; }
+    .topbar-title { font-size: 15px; }
+    .topbar-subtitle { font-size: 10px; }
+    .chart-toolbar { padding: 6px 10px; gap: 3px; }
+    #chart { min-height: 220px; }
+    .chart-legend .legend-vol { display: none; }
+    /* LP detail — trades */
+    .trades-panel .tab-bar button { padding: 8px 12px; font-size: 12px; }
+    .trades-table { min-width: 420px; }
+    /* LP detail — sidebar */
+    .sidebar-price { padding: 10px; }
+    .sidebar-price .price-val { font-size: 15px; }
+    .sidebar-stats { padding: 8px 10px; }
+    .sidebar-stats .stat-row { font-size: 11px; padding: 5px 0; }
+    .change-cell .clbl { font-size: 9px; }
+    .change-cell .cval { font-size: 11px; }
+    .txns-section { padding: 8px 10px; }
+    .pool-section { padding: 8px 10px; }
+    .pool-row { font-size: 11px; }
+    .pool-row .lbl .icon { width: 16px; height: 16px; }
+    .pool-aid { font-size: 10px; }
+    .pair-info-section { padding: 8px 10px; }
+    .pair-info-section .pool-row { font-size: 11px; }
+    /* LP detail — swap */
+    .swap-input { font-size: 18px; }
+    .swap-btn { padding: 14px; min-height: 48px; }
+    .swap-panel { padding: 10px; }
+    .swap-box { padding: 8px; }
+    .swap-token-badge { padding: 4px 8px; }
+    .swap-sym { font-size: 11px; }
+    .swap-aid { font-size: 8px; }
+    /* General */
+    .page { padding: 12px 0; }
+    .loading { padding: 40px 16px; }
+    .empty { padding: 40px 16px; }
+}
+
+/* 375px — Small phone (iPhone SE) */
+@media (max-width: 375px) {
+    .container { padding: 0 8px; }
+    .pair-name { font-size: 11px; }
+    .pair-name small { display: none; }
+    .pairs-table td { font-size: 11px; }
+    .stat-value { font-size: 12px; }
+    /* LP detail */
+    .detail-topbar { padding: 8px; gap: 8px; }
+    .topbar-title { font-size: 14px; }
+    .topbar-subtitle { font-size: 9px; }
+    .sidebar-price .price-val { font-size: 14px; }
+    .sidebar-price .price-native { font-size: 11px; }
+    .change-cell .cval { font-size: 11px; }
+    .pool-row .val .usd { font-size: 9px; }
+    .pair-info-section .pool-row .val { font-size: 10px; }
+    .trades-table { min-width: 380px; }
+    .swap-input { font-size: 16px; }
+}
+
+/* Global touch & mobile improvements */
+@media (pointer: coarse) {
+    body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    button, a, .pairs-table tr { -webkit-tap-highlight-color: transparent; }
+    .pairs-table td { padding-top: 12px; padding-bottom: 12px; }
+    .swap-btn { min-height: 48px; }
+    .back-btn { padding: 8px 12px; min-width: 44px; min-height: 44px; }
+    .chart-toolbar button { min-height: 36px; }
+}
+
+/* Swap Panel */
+.swap-panel { padding: 16px; border-top: 1px solid var(--border); min-width: 0; }
+.swap-panel h4 { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.swap-box { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 4px; transition: border-color 0.15s; }
+.swap-box:focus-within { border-color: var(--accent); }
+.swap-box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; color: var(--text-3); }
+.swap-usd-hint { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.swap-box-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.swap-input { flex: 1; background: transparent; border: none; color: var(--text-1); font-family: var(--mono); font-size: 20px; font-weight: 600; outline: none; min-width: 0; }
+.swap-input::placeholder { color: var(--text-3); opacity: 0.5; }
+.swap-input:read-only { color: var(--text-2); }
+.swap-token-badge { display: flex; align-items: center; gap: 6px; background: var(--bg-tertiary); padding: 6px 10px; border-radius: 20px; flex-shrink: 0; }
+.swap-token-badge .icon { width: 20px; height: 20px; border-radius: 50%; font-size: 8px; }
+.swap-token-badge .icon img { width: 100%; height: 100%; }
+.swap-sym { font-weight: 600; font-size: 13px; white-space: nowrap; }
+.swap-aid { font-size: 10px; font-family: var(--mono); color: var(--text-3); }
+.swap-arrow-wrap { display: flex; justify-content: center; margin: -2px 0; position: relative; z-index: 1; }
+.swap-arrow-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-tertiary); border: 3px solid var(--bg-secondary); color: var(--text-2); font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; cursor: pointer; }
+.swap-arrow-btn:hover { background: var(--accent); color: var(--bg-primary); }
+.swap-info { padding: 8px 0; font-size: 12px; }
+.swap-info-row { display: flex; justify-content: space-between; padding: 3px 0; color: var(--text-3); gap: 8px; }
+.swap-info-row span:last-child { font-family: var(--mono); color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swap-btn { width: 100%; padding: 12px; margin-top: 8px; background: var(--accent); color: var(--bg-primary); font-size: 14px; font-weight: 600; border-radius: var(--radius); transition: all 0.15s; }
+.swap-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.swap-btn:disabled { background: var(--bg-tertiary); color: var(--text-3); cursor: not-allowed; }
+.swap-btn.connecting { background: var(--bg-tertiary); color: var(--text-2); }
+.swap-env-hint { text-align: center; padding: 12px 0; font-size: 12px; color: var(--text-3); }
+</style>
+</head>
+<body>
+<div id="app">
+    <!-- Header -->
+    <div class="header">
+        <div class="container">
+            <div class="logo" onclick="navigate('/')">
+                <img src="appicon.svg" alt="BeamScreener" style="width:28px;height:28px">
+                BeamScreener <span>DEX</span>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search pairs..." oninput="onSearch(this.value)">
+            </div>
+            <div class="header-right">
+                <div class="beam-price">BEAM <b id="beamPrice">$—</b></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar" id="statsBar">
+        <div class="container">
+            <div class="stat"><div class="stat-label">Total TVL</div><div class="stat-value" id="statTvl">$—</div></div>
+            <div class="stat"><div class="stat-label">24h Volume</div><div class="stat-value" id="statVol">$—</div></div>
+            <div class="stat"><div class="stat-label">Active Pairs</div><div class="stat-value" id="statPairs">—</div></div>
+            <div class="stat"><div class="stat-label">Total Trades</div><div class="stat-value" id="statTrades">—</div></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="page">
+        <div class="container" id="content">
+            <div class="loading"><div class="spinner"></div><div>Loading pairs...</div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* State                                                                     */
+/* ══════════════════════════════════════════════════════════════════════════ */
+const PROD_API = 'https://buybeam.my/dashboard';
+const API = (location.protocol === 'file:' || location.hostname === 'buybeam.my') ? PROD_API : location.origin;
+let currentPage = '/';
+let currentPairId = null;
+let currentPair = null;
+let pairsData = [];
+let sortField = 'tvl_usd';
+let sortOrder = 'desc';
+let chart = null;
+let lineSeries = null;
+let volumeSeries = null;
+let ws = null;
+let wsReconnectDelay = 1000;
+let searchDebounce = null;
+let activeInterval = '1h';
+let priceMode = 'native'; // 'native' or 'usd'
+let beamUsd = 0;
+let rawCandles = []; // store raw candle data for price mode switching
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Utilities                                                                 */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function fmt$(v, dec = 2) {
+    if (v == null || isNaN(v)) return '$—';
+    if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
+    if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+    if (v >= 1e3) return '$' + (v/1e3).toFixed(2) + 'K';
+    if (v >= 1) return '$' + v.toFixed(dec);
+    if (v >= 0.0001) return '$' + v.toFixed(6);
+    if (v > 0) return '$' + fmtPriceSub(v);
+    return '$0.00';
+}
+
+function fmtNum(v, dec = 2) {
+    if (v == null || isNaN(v)) return '—';
+    if (v >= 1e9) return (v/1e9).toFixed(2) + 'B';
+    if (v >= 1e6) return (v/1e6).toFixed(2) + 'M';
+    if (v >= 1e3) return (v/1e3).toFixed(2) + 'K';
+    return v.toFixed(dec);
+}
+
+function fmtPct(v) {
+    if (v == null || isNaN(v)) return '<span class="neutral">—</span>';
+    const cls = v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+    const sign = v > 0 ? '+' : '';
+    return `<span class="${cls}">${sign}${v.toFixed(2)}%</span>`;
+}
+
+function fmtPrice(v) {
+    if (!v || v === 0) return '—';
+    if (v >= 1) return v.toFixed(4);
+    if (v >= 0.0001) return v.toFixed(8);
+    return fmtPriceSub(v);
+}
+
+// DexScreener-style subscript zeros: 0.00000001745 → 0.0₇1745
+function fmtPriceSub(v) {
+    if (!v || v === 0) return '0';
+    if (v >= 1) return v.toFixed(4);
+    if (v >= 0.001) return v.toFixed(6);
+    const sub = '\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089';
+    const s = v.toFixed(20);
+    // Count leading zeros after "0."
+    const afterDot = s.slice(2); // everything after "0."
+    let zeros = 0;
+    for (let i = 0; i < afterDot.length; i++) {
+        if (afterDot[i] === '0') zeros++;
+        else break;
+    }
+    if (zeros < 2) return v.toFixed(Math.min(zeros + 4, 10));
+    // Build subscript number
+    const subStr = String(zeros).split('').map(d => sub[parseInt(d)]).join('');
+    // Get 4 significant digits after the zeros
+    const sig = afterDot.slice(zeros, zeros + 4);
+    return '0.0' + subStr + sig;
+}
+
+function fmtDate(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    const now = Date.now();
+    const diff = (now - d.getTime()) / 1000;
+    if (diff < 60) return Math.floor(diff) + 's ago';
+    if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+    if (diff < 7 * 86400) return Math.floor(diff/86400) + 'd ago';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtDateFull(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function fmtAmount(v, dec = 8) {
+    if (!v) return '0';
+    const n = Math.abs(Number(v)) / Math.pow(10, dec);
+    if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(2) + 'K';
+    if (n >= 1) return n.toFixed(2);
+    if (n >= 0.001) return n.toFixed(4);
+    return n.toFixed(Math.min(dec, 6));
+}
+
+function iconHtml(logo, symbol, size = 28) {
+    const initials = (symbol || '??').slice(0, 2).toUpperCase();
+    if (logo) {
+        return `<div class="icon" style="width:${size}px;height:${size}px"><img src="${logo}" onerror="this.onerror=null;this.parentElement.textContent='${initials}'"></div>`;
+    }
+    return `<div class="icon" style="width:${size}px;height:${size}px;font-size:${Math.floor(size/2.5)}px">${initials}</div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* API                                                                       */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function apiFetch(path) {
+    try {
+        const r = await fetch(API + path);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await r.json();
+    } catch(e) {
+        console.error('API Error:', path, e);
+        return null;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* WebSocket                                                                 */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function connectWS() {
+    let wsUrl;
+    if (location.protocol === 'file:' || location.hostname === 'buybeam.my') {
+        wsUrl = 'wss://buybeam.my/dashboard/ws';
+    } else {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${proto}//${location.host}/ws`;
+    }
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+        wsReconnectDelay = 1000;
+        ws.send(JSON.stringify({ action: 'subscribe', channel: 'pairs_all' }));
+        if (currentPairId) {
+            ws.send(JSON.stringify({ action: 'subscribe', channel: `pair:${currentPairId}` }));
+            ws.send(JSON.stringify({ action: 'subscribe', channel: `trades:${currentPairId}` }));
+        }
+    };
+    ws.onmessage = (e) => {
+        try { handleWSEvent(JSON.parse(e.data)); } catch(err) {}
+    };
+    ws.onclose = () => {
+        setTimeout(() => { wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000); connectWS(); }, wsReconnectDelay);
+    };
+    ws.onerror = () => ws.close();
+}
+
+function handleWSEvent(event) {
+    if (event.type === 'pair_update' && currentPage === '/') updatePairRow(event);
+    if (event.type === 'trade' && currentPage === '/pair' && event.pair_id === currentPairId) prependTrade(event);
+    if (event.type === 'stats_update') loadStats();
+}
+
+function updatePairRow(event) {
+    const row = document.getElementById(`pair-${event.pair_id}`);
+    if (!row) return;
+    const priceCell = row.querySelector('.price-cell');
+    if (priceCell && event.price_usd != null) priceCell.textContent = fmt$(event.price_usd);
+}
+
+function prependTrade(trade) {
+    const tbody = document.getElementById('tradesBody');
+    if (!tbody || !currentPair) return;
+    const tr = document.createElement('tr');
+    const isBuy = trade.side === 'buy';
+    const s1 = currentPair.symbol1, s2 = currentPair.symbol2;
+    const dateStr = window.innerWidth <= 640 ? fmtDate(trade.timestamp) : fmtDateFull(trade.timestamp);
+    tr.innerHTML = `
+        <td title="${fmtDateFull(trade.timestamp)}">${dateStr}</td>
+        <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
+        <td>${fmt$(trade.price_usd)}</td>
+        <td>${fmtAmount(trade.amount_in)}</td>
+        <td>${fmtAmount(trade.amount_out)}</td>
+        <td>${fmt$(trade.value_usd)}</td>
+    `;
+    tbody.insertBefore(tr, tbody.firstChild);
+    if (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Sparkline                                                                 */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function drawSparkline(canvas, data) {
+    if (!data || !data.length) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = canvas.offsetHeight * 2;
+    ctx.scale(2, 2);
+    const cw = w / 2, ch = h / 2;
+    const min = Math.min(...data), max = Math.max(...data);
+    const range = max - min || 1;
+    const isUp = data[data.length - 1] >= data[0];
+    ctx.beginPath();
+    ctx.strokeStyle = isUp ? '#10b981' : '#ef4444';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < data.length; i++) {
+        const x = (i / (data.length - 1)) * cw;
+        const y = ch - ((data[i] - min) / range) * (ch - 4) - 2;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Navigation                                                                */
+/* ══════════════════════════════════════════════════════════════════════════ */
+function navigate(path) {
+    if (path === '/') {
+        currentPage = '/'; currentPairId = null; currentPair = null;
+        window.location.hash = '';
+        document.querySelector('.stats-bar').style.display = '';
+        document.querySelector('.page').className = 'page';
+        document.getElementById('content').className = 'container';
+        renderPairsList();
+    } else if (path.startsWith('/pair/')) {
+        currentPage = '/pair';
+        currentPairId = path.replace('/pair/', '');
+        window.location.hash = `pair/${currentPairId}`;
+        document.querySelector('.stats-bar').style.display = 'none';
+        document.querySelector('.page').className = 'page';
+        document.getElementById('content').className = '';
+        document.getElementById('content').style.maxWidth = 'none';
+        document.getElementById('content').style.padding = '0';
+        renderPairDetail(currentPairId);
+    }
+}
+
+window.addEventListener('hashchange', () => {
+    const hash = location.hash.replace('#', '');
+    if (hash.startsWith('pair/')) navigate('/pair/' + hash.replace('pair/', ''));
+    else navigate('/');
+});
+
+function onSearch(val) {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(async () => { await loadPairs(val); renderPairsTable(); }, 300);
+}
+
+function sortPairs(field) {
+    if (sortField === field) sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
+    else { sortField = field; sortOrder = 'desc'; }
+    loadPairs(document.getElementById('searchInput')?.value || '').then(renderPairsTable);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Pairs List Page                                                           */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function loadPairs(search = '') {
+    const params = new URLSearchParams({ sort_by: sortField, order: sortOrder, limit: '100' });
+    if (search) params.set('search', search);
+    const data = await apiFetch(`/api/pairs?${params}`);
+    if (data && data.pairs) pairsData = data.pairs;
+    return pairsData;
+}
+
+async function renderPairsList() {
+    const el = document.getElementById('content');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div><div>Loading pairs...</div></div>';
+    await loadPairs();
+    renderPairsTable();
+}
+
+function renderPairsTable() {
+    const el = document.getElementById('content');
+    if (!pairsData.length) { el.innerHTML = '<div class="empty">No pairs found.</div>'; return; }
+
+    const sortIcon = (f) => sortField === f ? (sortOrder === 'desc' ? ' &#9660;' : ' &#9650;') : '';
+    const sortCls = (f) => sortField === f ? 'sorted' : '';
+
+    let html = `<table class="pairs-table"><thead><tr>
+        <th style="width:40px" class="hide-tablet">#</th><th>Pair</th>
+        <th class="${sortCls('price_usd')}" onclick="sortPairs('price_usd')">Price ${sortIcon('price_usd')}</th>
+        <th class="${sortCls('price_change_1h')} hide-mobile" onclick="sortPairs('price_change_1h')">1h ${sortIcon('price_change_1h')}</th>
+        <th class="${sortCls('price_change_24h')}" onclick="sortPairs('price_change_24h')">24h ${sortIcon('price_change_24h')}</th>
+        <th class="${sortCls('trades_24h')} hide-tablet" onclick="sortPairs('trades_24h')">Txns ${sortIcon('trades_24h')}</th>
+        <th class="${sortCls('volume_24h_usd')} hide-sm" onclick="sortPairs('volume_24h_usd')">Volume ${sortIcon('volume_24h_usd')}</th>
+        <th class="${sortCls('tvl_usd')} hide-tablet" onclick="sortPairs('tvl_usd')">Liquidity ${sortIcon('tvl_usd')}</th>
+        <th class="hide-mobile" style="width:130px">7d</th>
+    </tr></thead><tbody>`;
+
+    pairsData.forEach((p, i) => {
+        const buys = p.buys_24h || 0;
+        const sells = p.sells_24h || 0;
+        const txns = buys + sells;
+        html += `<tr id="pair-${p.pair_id}" onclick="navigate('/pair/${p.pair_id}')">
+            <td class="hide-tablet" style="color:var(--text-3)">${i + 1}</td>
+            <td><div class="pair-cell">
+                <div class="pair-icons">${iconHtml(p.logo1, p.symbol1)}${iconHtml(p.logo2, p.symbol2)}</div>
+                <div class="pair-name">${p.symbol1}/${p.symbol2} <small>#${p.aid2}</small></div>
+            </div></td>
+            <td class="mono price-cell">${fmt$(p.price_usd)}</td>
+            <td class="hide-mobile">${fmtPct(p.price_change_1h)}</td>
+            <td>${fmtPct(p.price_change_24h)}</td>
+            <td class="mono txns-cell hide-tablet">${txns} <span class="positive">${buys}</span>/<span class="negative">${sells}</span></td>
+            <td class="mono hide-sm">${fmt$(p.volume_24h_usd)}</td>
+            <td class="mono hide-tablet">${fmt$(p.tvl_usd)}</td>
+            <td class="sparkline-cell hide-mobile"><canvas data-sparkline='${JSON.stringify(p.sparkline_7d || [])}'></canvas></td>
+        </tr>`;
+    });
+
+    html += '</tbody></table>';
+    el.innerHTML = html;
+    el.querySelectorAll('.sparkline-cell canvas').forEach(c => {
+        try { const d = JSON.parse(c.dataset.sparkline); if (d && d.length > 1) drawSparkline(c, d); } catch(e) {}
+    });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Pair Detail Page — DexScreener-style                                      */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function renderPairDetail(pairId) {
+    const el = document.getElementById('content');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div><div>Loading pair data...</div></div>';
+
+    const pair = await apiFetch(`/api/pairs/${pairId}`);
+    if (!pair || pair.error) { el.innerHTML = '<div class="empty">Pair not found.</div>'; return; }
+    currentPair = pair;
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'subscribe', channel: `pair:${pairId}` }));
+        ws.send(JSON.stringify({ action: 'subscribe', channel: `trades:${pairId}` }));
+    }
+
+    const s1 = pair.symbol1, s2 = pair.symbol2;
+    const totalTxns = (pair.buys_24h || 0) + (pair.sells_24h || 0);
+    const buyPct = totalTxns > 0 ? (pair.buys_24h / totalTxns * 100) : 50;
+    // Use human-readable reserves and USD values from backend
+    const reserve1Human = pair.reserve1_human || (pair.reserve1 / Math.pow(10, pair.decimals1 || 8));
+    const reserve2Human = pair.reserve2_human || (pair.reserve2 / Math.pow(10, pair.decimals2 || 8));
+    const reserve1Usd = pair.reserve1_usd || 0;
+    const reserve2Usd = pair.reserve2_usd || 0;
+
+    el.innerHTML = `
+    <div class="detail-layout">
+        <!-- Left: chart + trades -->
+        <div class="detail-left">
+            <div class="detail-topbar">
+                <button class="back-btn" onclick="navigate('/')">&larr;</button>
+                <div class="topbar-pair-icons">
+                    ${iconHtml(pair.logo1, s1, 32)}
+                    ${iconHtml(pair.logo2, s2, 32)}
+                </div>
+                <div>
+                    <div class="topbar-title">${s1} / ${s2}</div>
+                    <div class="topbar-subtitle">BEAM DEX</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-toolbar" id="chartToolbar">
+                    <div class="tf-group">
+                        ${['1m','5m','15m','1h','4h','1d'].map(iv =>
+                            `<button class="${iv === activeInterval ? 'active' : ''}" onclick="changeInterval('${iv}')">${iv}</button>`
+                        ).join('')}
+                    </div>
+                    <div class="separator"></div>
+                    <div class="price-toggle" id="priceToggle">
+                        <button class="${priceMode==='usd'?'active':''}" onclick="setPriceMode('usd')">USD</button>
+                        <button class="${priceMode==='native'?'active':''}" onclick="setPriceMode('native')">${s1}</button>
+                    </div>
+                </div>
+                <div id="chart">
+                    <div class="chart-legend" id="chartLegend"></div>
+                </div>
+            </div>
+
+            <div class="trades-panel">
+                <div class="tab-bar">
+                    <button class="active">Transactions</button>
+                </div>
+                <div class="trades-wrap">
+                    <table class="trades-table">
+                        <thead><tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Price USD</th>
+                            <th>${s1}</th>
+                            <th>${s2}</th>
+                            <th>Value</th>
+                        </tr></thead>
+                        <tbody id="tradesBody">
+                            <tr><td colspan="6" class="loading"><div class="spinner"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right sidebar -->
+        <div class="detail-right">
+            <div class="sidebar-price">
+                <div class="price-row">
+                    <span class="price-label">PRICE USD</span>
+                    <span class="price-label">PRICE ${s1}</span>
+                </div>
+                <div class="price-row">
+                    <span class="price-val">${fmt$(pair.price_usd)}</span>
+                    <span class="price-native">${fmtPrice(pair.price_native)} ${s1}</span>
+                </div>
+            </div>
+
+            <div class="change-row">
+                <div class="change-cell"><div class="clbl">5m</div><div class="cval">${fmtPct(pair.price_change_5m)}</div></div>
+                <div class="change-cell"><div class="clbl">1h</div><div class="cval">${fmtPct(pair.price_change_1h)}</div></div>
+                <div class="change-cell"><div class="clbl">6h</div><div class="cval">${fmtPct(pair.price_change_6h)}</div></div>
+                <div class="change-cell"><div class="clbl">24h</div><div class="cval">${fmtPct(pair.price_change_24h)}</div></div>
+            </div>
+
+            <div class="txns-section">
+                <div class="txns-header"><span>TXNS</span><span>BUYS</span><span>SELLS</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                    <span class="mono" style="font-weight:700">${totalTxns}</span>
+                    <span class="mono buys">${pair.buys_24h || 0}</span>
+                    <span class="mono sells">${pair.sells_24h || 0}</span>
+                </div>
+                <div class="txns-bar">
+                    <div class="buy-fill" style="width:${buyPct}%"></div>
+                    <div class="sell-fill" style="width:${100-buyPct}%"></div>
+                </div>
+            </div>
+
+            <div class="sidebar-stats">
+                <div class="stat-row"><span class="lbl">VOLUME</span><span class="val">${fmt$(pair.volume_24h_usd)}</span></div>
+                <div class="stat-row"><span class="lbl">LIQUIDITY</span><span class="val">${fmt$(pair.tvl_usd)}</span></div>
+            </div>
+
+            <div class="pool-section">
+                <h4>Pooled Tokens</h4>
+                <div class="pool-row">
+                    <span class="lbl">${iconHtml(pair.logo1, s1, 18)} ${s1} <span class="pool-aid">#${pair.aid1}</span></span>
+                    <span class="val">${fmtNum(reserve1Human, 2)}<span class="usd">${fmt$(reserve1Usd)}</span></span>
+                </div>
+                <div class="pool-row">
+                    <span class="lbl">${iconHtml(pair.logo2, s2, 18)} ${s2} <span class="pool-aid">#${pair.aid2}</span></span>
+                    <span class="val">${fmtNum(reserve2Human, 2)}<span class="usd">${fmt$(reserve2Usd)}</span></span>
+                </div>
+            </div>
+
+            <div class="pair-info-section">
+                <h4>Pair Info</h4>
+                <div class="pool-row"><span class="lbl">Pair ID</span><span class="val" style="font-size:11px">${pair.pair_id}</span></div>
+                <div class="pool-row"><span class="lbl">LP Token</span><span class="val">Asset #${pair.lp_token}</span></div>
+                <div class="pool-row"><span class="lbl">Rate</span><span class="val">1 ${s1} = ${fmtPrice(pair.rate_2_1)} ${s2}</span></div>
+            </div>
+
+            <!-- Swap Panel -->
+            <div class="swap-panel">
+                <h4>Trade</h4>
+
+                <div class="swap-box" id="swapFromBox">
+                    <div class="swap-box-header">
+                        <span>You Pay</span>
+                        <span class="swap-usd-hint" id="swapPayUsd"></span>
+                    </div>
+                    <div class="swap-box-row">
+                        <input type="text" class="swap-input" id="swapFromAmount" placeholder="0" inputmode="decimal" oninput="onSwapInput()">
+                        <div class="swap-token-badge" id="swapFromToken">
+                            ${iconHtml(pair.logo1, s1, 20)}
+                            <span class="swap-sym">${s1}</span>
+                            <span class="swap-aid">#${pair.aid1}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="swap-arrow-wrap">
+                    <button class="swap-arrow-btn" onclick="flipSwapDirection()" title="Swap direction">&#8597;</button>
+                </div>
+
+                <div class="swap-box" id="swapToBox">
+                    <div class="swap-box-header">
+                        <span>You Receive</span>
+                        <span class="swap-usd-hint" id="swapReceiveUsd"></span>
+                    </div>
+                    <div class="swap-box-row">
+                        <input type="text" class="swap-input" id="swapToAmount" placeholder="0" readonly>
+                        <div class="swap-token-badge" id="swapToToken">
+                            ${iconHtml(pair.logo2, s2, 20)}
+                            <span class="swap-sym">${s2}</span>
+                            <span class="swap-aid">#${pair.aid2}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="swap-info" id="swapQuoteInfo" style="display:none">
+                    <div class="swap-info-row"><span>Rate</span><span id="swapRate"></span></div>
+                </div>
+
+                <button class="swap-btn" id="swapBtn" onclick="handleSwapClick()">Connect Wallet</button>
+            </div>
+        </div>
+    </div>`;
+
+    loadChart(pairId, activeInterval);
+    loadTrades(pairId);
+    initSwapPanel(pair);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Chart with USD/Native toggle                                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function loadChart(pairId, interval) {
+    activeInterval = interval;
+    document.querySelectorAll('#chartToolbar .tf-group button').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent === interval);
+    });
+
+    const chartEl = document.getElementById('chart');
+    if (!chartEl) return;
+    chartEl.innerHTML = '<div class="chart-legend" id="chartLegend"></div>';
+
+    const data = await apiFetch(`/api/pairs/${pairId}/ohlcv?interval=${interval}&limit=1000`);
+    rawCandles = (data && data.candles) ? data.candles : [];
+
+    chart = LightweightCharts.createChart(chartEl, {
+        width: chartEl.clientWidth,
+        height: chartEl.clientHeight || 400,
+        layout: {
+            background: { type: 'solid', color: '#0a0e17' },
+            textColor: '#64748b',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+        },
+        grid: {
+            vertLines: { color: 'rgba(45,55,72,0.15)' },
+            horzLines: { color: 'rgba(45,55,72,0.15)' },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(37,194,160,0.4)', width: 1, style: 0, labelBackgroundColor: '#25c2a0' },
+            horzLine: { color: 'rgba(37,194,160,0.4)', width: 1, style: 0, labelBackgroundColor: '#25c2a0' },
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(45,55,72,0.3)',
+            scaleMargins: { top: 0.05, bottom: 0.25 },
+        },
+        timeScale: {
+            borderColor: 'rgba(45,55,72,0.3)',
+            timeVisible: true,
+            secondsVisible: false,
+            rightOffset: 5,
+        },
+        handleScroll: { vertTouchDrag: false },
+    });
+
+    // Line series (main price line)
+    lineSeries = chart.addAreaSeries({
+        lineColor: '#25c2a0',
+        topColor: 'rgba(37,194,160,0.28)',
+        bottomColor: 'rgba(37,194,160,0.02)',
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBorderColor: '#25c2a0',
+        crosshairMarkerBackgroundColor: '#0a0e17',
+    });
+
+    // Volume bars
+    volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'vol',
+    });
+    chart.priceScale('vol').applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        drawTicks: false,
+        borderVisible: false,
+    });
+
+    applyPriceMode();
+    updateChartLegend(rawCandles.length ? rawCandles[rawCandles.length - 1] : null);
+
+    chart.subscribeCrosshairMove((param) => {
+        if (!param || !param.time) {
+            // Crosshair moved away — show latest candle
+            updateChartLegend(rawCandles.length ? rawCandles[rawCandles.length - 1] : null);
+            return;
+        }
+        // Find the candle matching this timestamp
+        const candle = rawCandles.find(c => c.time === param.time);
+        if (candle) updateChartLegend(candle);
+    });
+
+    const resizeObserver = new ResizeObserver(() => {
+        if (chart) chart.applyOptions({ width: chartEl.clientWidth });
+    });
+    resizeObserver.observe(chartEl);
+}
+
+function updateChartLegend(candle) {
+    const el = document.getElementById('chartLegend');
+    if (!el) return;
+    if (!candle || !currentPair) { el.innerHTML = ''; return; }
+
+    const s1 = currentPair.symbol1, s2 = currentPair.symbol2;
+    const mul = (priceMode === 'usd' && beamUsd > 0) ? beamUsd : 1;
+    const suffix = priceMode === 'usd' ? '' : ' ' + s1;
+    const prefix = priceMode === 'usd' ? '$' : '';
+
+    const o = candle.open * mul;
+    const h = candle.high * mul;
+    const l = candle.low * mul;
+    const c = candle.close * mul;
+    const vol = candle.volume / 1e8;
+    const change = candle.open > 0 ? ((candle.close - candle.open) / candle.open * 100) : 0;
+    const chgCls = change >= 0 ? 'positive' : 'negative';
+    const chgSign = change >= 0 ? '+' : '';
+    const dot = change >= 0 ? '#10b981' : '#ef4444';
+
+    const fp = (v) => prefix + fmtPriceSub(v) + suffix;
+
+    if (window.innerWidth <= 640) {
+        el.innerHTML = `
+            <div class="legend-title">${s1}/${s2} &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
+                <span class="legend-ohlc">
+                    <span class="val">${fp(c)}</span>
+                    <span class="chg ${chgCls}">${chgSign}${change.toFixed(2)}%</span>
+                </span>
+            </div>`;
+    } else {
+        el.innerHTML = `
+            <div class="legend-title">${s1}/${s2} on BEAM DEX &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
+                <span class="legend-ohlc">
+                    <span class="lbl">O</span><span class="val">${fp(o)}</span>
+                    <span class="lbl">H</span><span class="val">${fp(h)}</span>
+                    <span class="lbl">L</span><span class="val">${fp(l)}</span>
+                    <span class="lbl">C</span><span class="val">${fp(c)}</span>
+                    <span class="chg ${chgCls}">${chgSign}${change.toFixed(2)}%</span>
+                </span>
+            </div>
+            <div class="legend-vol">Volume <span class="val">${fmtNum(vol, 2)}</span></div>
+        `;
+    }
+}
+
+function applyPriceMode() {
+    if (!rawCandles.length || !lineSeries) return;
+
+    const mul = (priceMode === 'usd' && beamUsd > 0) ? beamUsd : 1;
+    const label = priceMode === 'usd' ? 'USD' : (currentPair ? currentPair.symbol1 : 'BEAM');
+
+    // Use close price for line chart
+    const lineData = rawCandles.map(c => ({
+        time: c.time,
+        value: c.close * mul,
+    }));
+
+    // Volume bars — green if price up from prev, red if down
+    const volumes = rawCandles.map((c, i) => {
+        const prevClose = i > 0 ? rawCandles[i-1].close : c.open;
+        const up = c.close >= prevClose;
+        return {
+            time: c.time,
+            value: c.volume / 1e8,
+            color: up ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)',
+        };
+    });
+
+    lineSeries.setData(lineData);
+    volumeSeries.setData(volumes);
+
+    // Format price scale with DexScreener-style subscript zeros
+    if (priceMode === 'usd') {
+        lineSeries.applyOptions({
+            priceFormat: { type: 'custom', formatter: p => '$' + fmtPriceSub(p) },
+        });
+    } else {
+        lineSeries.applyOptions({
+            priceFormat: { type: 'custom', formatter: p => fmtPriceSub(p) + ' ' + label },
+        });
+    }
+
+    chart.timeScale().fitContent();
+}
+
+function setPriceMode(mode) {
+    priceMode = mode;
+    document.querySelectorAll('#priceToggle button').forEach(btn => {
+        btn.classList.toggle('active', (mode === 'usd' && btn.textContent === 'USD') || (mode === 'native' && btn.textContent !== 'USD'));
+    });
+    applyPriceMode();
+}
+
+function changeInterval(iv) {
+    if (currentPairId) loadChart(currentPairId, iv);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Trades with ticker names in columns + full date                           */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function loadTrades(pairId) {
+    const data = await apiFetch(`/api/pairs/${pairId}/trades?limit=50`);
+    const tbody = document.getElementById('tradesBody');
+    if (!tbody) return;
+
+    if (!data || !data.trades || !data.trades.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No trades yet</td></tr>';
+        return;
+    }
+
+    const s1 = currentPair ? currentPair.symbol1 : '?';
+    const s2 = currentPair ? currentPair.symbol2 : '?';
+
+    const dec1 = currentPair ? (currentPair.decimals1 || 8) : 8;
+    const dec2 = currentPair ? (currentPair.decimals2 || 8) : 8;
+
+    const isMobile = window.innerWidth <= 640;
+    tbody.innerHTML = data.trades.map(t => {
+        const isBuy = t.side === 'buy';
+        // Determine which asset is which based on aid_in and format with correct decimals
+        let col1Val, col2Val;
+        if (t.aid_in === (currentPair ? currentPair.aid1 : 0)) {
+            col1Val = fmtAmount(t.amount_in, dec1);
+            col2Val = fmtAmount(t.amount_out, dec2);
+        } else {
+            col1Val = fmtAmount(t.amount_out, dec1);
+            col2Val = fmtAmount(t.amount_in, dec2);
+        }
+        const dateStr = isMobile ? fmtDate(t.timestamp) : fmtDateFull(t.timestamp);
+
+        return `<tr>
+            <td style="color:var(--text-3)" title="${fmtDateFull(t.timestamp)}">${dateStr}</td>
+            <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
+            <td>${fmt$(t.price_usd)}</td>
+            <td>${col1Val}</td>
+            <td>${col2Val}</td>
+            <td>${fmt$(t.value_usd)}</td>
+        </tr>`;
+    }).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Global Stats                                                              */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function loadStats() {
+    const data = await apiFetch('/api/stats');
+    if (!data) return;
+    beamUsd = data.beam_usd || 0;
+    document.getElementById('statTvl').textContent = fmt$(data.total_tvl_usd);
+    document.getElementById('statVol').textContent = fmt$(data.volume_24h_usd);
+    document.getElementById('statPairs').textContent = data.total_pairs || 0;
+    document.getElementById('statTrades').textContent = fmtNum(data.total_trades, 0);
+    document.getElementById('beamPrice').textContent = fmt$(data.beam_usd);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Swap Panel — DappConnector integration                                    */
+/* ══════════════════════════════════════════════════════════════════════════ */
+const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+let swapConnector = null;
+let swapDirection = 'buy'; // 'buy' = pay aid1(BEAM) → receive aid2(token), 'sell' = pay aid2 → receive aid1
+let swapQuoteTimer = null;
+let swapQuoteData = null;
+let swapFromAid = 0;
+let swapToAid = 0;
+let swapFromSymbol = '';
+let swapToSymbol = '';
+let swapPairKind = 2;
+let swapFromLogo = '';
+let swapToLogo = '';
+
+function initSwapPanel(pair) {
+    if (!pair) return;
+    swapFromAid = pair.aid1;
+    swapToAid = pair.aid2;
+    swapFromSymbol = pair.symbol1;
+    swapToSymbol = pair.symbol2;
+    swapFromLogo = pair.logo1 || '';
+    swapToLogo = pair.logo2 || '';
+    swapPairKind = pair.kind || 2;
+    swapDirection = 'buy';
+    swapQuoteData = null;
+
+    // Prefill ~$10 worth of BEAM
+    if (beamUsd > 0 && swapFromAid === 0) {
+        const amt = Math.max(1, Math.round(10 / beamUsd));
+        const input = document.getElementById('swapFromAmount');
+        if (input) {
+            input.value = amt;
+            document.getElementById('swapPayUsd').textContent = fmt$(amt * beamUsd);
+        }
+    }
+
+    // Trigger estimate for prefilled amount
+    onSwapInput();
+}
+
+function updateSwapBtn() {
+    const btn = document.getElementById('swapBtn');
+    if (!btn) return;
+    if (swapConnector && swapConnector.isConnected()) {
+        const fromInput = document.getElementById('swapFromAmount');
+        const val = fromInput ? parseFloat(fromInput.value) : 0;
+        if (val > 0 && swapQuoteData) {
+            btn.textContent = 'Swap';
+            btn.disabled = false;
+        } else if (val > 0) {
+            btn.textContent = 'Fetching quote...';
+            btn.disabled = true;
+        } else {
+            btn.textContent = 'Enter amount';
+            btn.disabled = true;
+        }
+    } else {
+        btn.textContent = 'Connect Wallet';
+        btn.disabled = false;
+    }
+}
+
+function flipSwapDirection() {
+    // Swap tokens
+    [swapFromAid, swapToAid] = [swapToAid, swapFromAid];
+    [swapFromSymbol, swapToSymbol] = [swapToSymbol, swapFromSymbol];
+    [swapFromLogo, swapToLogo] = [swapToLogo, swapFromLogo];
+    swapDirection = swapDirection === 'buy' ? 'sell' : 'buy';
+
+    // Update token badges
+    const fromToken = document.getElementById('swapFromToken');
+    const toToken = document.getElementById('swapToToken');
+    if (fromToken) fromToken.innerHTML = `${iconHtml(swapFromLogo, swapFromSymbol, 20)}<span class="swap-sym">${swapFromSymbol}</span><span class="swap-aid">#${swapFromAid}</span>`;
+    if (toToken) toToken.innerHTML = `${iconHtml(swapToLogo, swapToSymbol, 20)}<span class="swap-sym">${swapToSymbol}</span><span class="swap-aid">#${swapToAid}</span>`;
+
+    // Move from amount to the new from, clear receive
+    const fromInput = document.getElementById('swapFromAmount');
+    const toInput = document.getElementById('swapToAmount');
+    const prevTo = toInput ? toInput.value.replace(/^~/, '') : '';
+    if (toInput) toInput.value = '';
+    if (fromInput && prevTo && prevTo !== '—' && prevTo !== 'Error' && !isNaN(parseFloat(prevTo))) {
+        fromInput.value = prevTo;
+    }
+
+    // Clear quote + USD hints
+    document.getElementById('swapQuoteInfo').style.display = 'none';
+    document.getElementById('swapPayUsd').textContent = '';
+    document.getElementById('swapReceiveUsd').textContent = '';
+    swapQuoteData = null;
+
+    // Re-trigger quote
+    if (fromInput && fromInput.value && parseFloat(fromInput.value) > 0) onSwapInput();
+    else updateSwapBtn();
+}
+
+function onSwapInput() {
+    clearTimeout(swapQuoteTimer);
+    const input = document.getElementById('swapFromAmount');
+    const val = input ? parseFloat(input.value) : 0;
+
+    if (!val || val <= 0) {
+        document.getElementById('swapToAmount').value = '';
+        document.getElementById('swapQuoteInfo').style.display = 'none';
+        document.getElementById('swapPayUsd').textContent = '';
+        document.getElementById('swapReceiveUsd').textContent = '';
+        swapQuoteData = null;
+        updateSwapBtn();
+        return;
+    }
+
+    // Show USD hint for pay amount
+    if (swapFromAid === 0 && beamUsd > 0) {
+        document.getElementById('swapPayUsd').textContent = fmt$(val * beamUsd);
+    } else if (swapToAid === 0 && beamUsd > 0 && currentPair) {
+        // Token → BEAM: estimate USD from token's price_usd
+        document.getElementById('swapPayUsd').textContent = currentPair.price_usd ? '~' + fmt$(val * currentPair.price_usd) : '';
+    } else {
+        document.getElementById('swapPayUsd').textContent = '';
+    }
+
+    swapQuoteTimer = setTimeout(() => fetchSwapQuote(val), 500);
+}
+
+// Local AMM estimate using pool reserves (constant product: x * y = k)
+function estimateSwapLocal(amount) {
+    if (!currentPair || !amount || amount <= 0) return null;
+    const r1 = currentPair.reserve1_human || 0;
+    const r2 = currentPair.reserve2_human || 0;
+    if (r1 <= 0 || r2 <= 0) return null;
+
+    let receiveEst, feeEst;
+    if (swapFromAid === currentPair.aid1) {
+        // Pay aid1, receive aid2: dy = r2 * dx / (r1 + dx)
+        receiveEst = r2 * amount / (r1 + amount);
+        feeEst = receiveEst * 0.013;
+    } else {
+        // Pay aid2, receive aid1: dx = r1 * dy / (r2 + dy)
+        receiveEst = r1 * amount / (r2 + amount);
+        feeEst = receiveEst * 0.013;
+    }
+    receiveEst -= feeEst;
+    return { receive: receiveEst, fee: feeEst };
+}
+
+async function fetchSwapQuote(amount) {
+    // Always show local estimate immediately
+    const localEst = estimateSwapLocal(amount);
+    if (localEst && localEst.receive > 0) {
+        const recv = localEst.receive;
+        document.getElementById('swapToAmount').value = '~' + (recv >= 1 ? recv.toFixed(4) : recv.toFixed(8));
+
+        // USD hint for receive
+        if (swapToAid === 0 && beamUsd > 0) {
+            document.getElementById('swapReceiveUsd').textContent = '~' + fmt$(recv * beamUsd);
+        } else if (swapFromAid === 0 && beamUsd > 0) {
+            document.getElementById('swapReceiveUsd').textContent = '~' + fmt$(amount * beamUsd);
+        } else {
+            document.getElementById('swapReceiveUsd').textContent = '';
+        }
+
+        // Rate
+        const rate = amount > 0 ? recv / amount : 0;
+        document.getElementById('swapRate').textContent = `1 ${swapFromSymbol} ≈ ${fmtPrice(rate)} ${swapToSymbol}`;
+        document.getElementById('swapQuoteInfo').style.display = 'block';
+    }
+
+    if (!swapConnector || !swapConnector.isConnected()) {
+        updateSwapBtn();
+        return;
+    }
+
+    const groth = Math.floor(amount * 1e8);
+    if (groth <= 0) return;
+
+    const btn = document.getElementById('swapBtn');
+    if (btn) { btn.textContent = 'Fetching quote...'; btn.disabled = true; }
+
+    try {
+        // DEX convention: user always PAYS callAid2, BUYS callAid1
+        // val2_pay = how much of callAid2 user pays
+        // val1_buy = 0 means "calculate how much I get"
+        let callAid1, callAid2;
+        const poolAid1 = currentPair.aid1;
+        const poolAid2 = currentPair.aid2;
+
+        if (swapFromAid === poolAid2) {
+            // User pays pool's aid2 → keep pool order
+            callAid1 = poolAid1;
+            callAid2 = poolAid2;
+        } else {
+            // User pays pool's aid1 → swap order so paying asset is aid2
+            callAid1 = poolAid2;
+            callAid2 = poolAid1;
+        }
+
+        const args = `action=pool_trade,cid=${DEX_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=0,val2_pay=${groth},bPredictOnly=1`;
+
+        const result = await swapConnector.invokeContract(args);
+
+        // Parse response: DEX returns {res: {buy, pay, pay_raw, fee_pool, fee_dao}}
+        let output = result;
+        if (result?.output) {
+            try { output = JSON.parse(result.output); } catch(e) { output = result; }
+        }
+        const res = output?.res || output;
+
+        if (res && res.buy !== undefined) {
+            const buyGrth = res.buy || 0;
+            const payGrth = res.pay || groth;
+            const feeGrth = res.fee_pool || 0;
+
+            const receiveHuman = buyGrth / 1e8;
+            document.getElementById('swapToAmount').value = receiveHuman >= 1 ? receiveHuman.toFixed(4) : receiveHuman.toFixed(8);
+
+            // USD hint for receive
+            if (swapToAid === 0 && beamUsd > 0) {
+                document.getElementById('swapReceiveUsd').textContent = fmt$(receiveHuman * beamUsd);
+            } else if (swapFromAid === 0 && beamUsd > 0) {
+                document.getElementById('swapReceiveUsd').textContent = '~' + fmt$(amount * beamUsd);
+            } else {
+                document.getElementById('swapReceiveUsd').textContent = '';
+            }
+
+            // Rate
+            const rate = amount > 0 ? receiveHuman / amount : 0;
+            document.getElementById('swapRate').textContent = `1 ${swapFromSymbol} = ${fmtPrice(rate)} ${swapToSymbol}`;
+
+            document.getElementById('swapQuoteInfo').style.display = 'block';
+
+            // Store execute args: same aid order, same pay amount, bPredictOnly=0
+            swapQuoteData = `action=pool_trade,cid=${DEX_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=0,val2_pay=${payGrth},bPredictOnly=0`;
+        }
+    } catch(e) {
+        console.error('Swap quote error:', e);
+        document.getElementById('swapToAmount').value = 'Error';
+        swapQuoteData = null;
+    }
+
+    updateSwapBtn();
+}
+
+async function handleSwapClick() {
+    const btn = document.getElementById('swapBtn');
+    if (!btn) return;
+
+    // Initialize connector on first click
+    if (!swapConnector) {
+        swapConnector = new BeamDappConnector({
+            appName: 'BeamScreener',
+            autoReconnect: true,
+            showLoader: false,
+            debug: true
+        });
+
+        swapConnector.on('connected', () => {
+            updateSwapBtn();
+            // Auto-fetch quote if amount is already entered
+            const input = document.getElementById('swapFromAmount');
+            if (input && parseFloat(input.value) > 0) onSwapInput();
+        });
+
+        swapConnector.on('disconnected', () => updateSwapBtn());
+    }
+
+    // Connect if not connected
+    if (!swapConnector.isConnected()) {
+        btn.textContent = 'Connecting...';
+        btn.disabled = true;
+        btn.classList.add('connecting');
+        try {
+            await swapConnector.connect();
+            btn.classList.remove('connecting');
+        } catch(e) {
+            btn.classList.remove('connecting');
+            console.error('Wallet connection failed:', e);
+            updateSwapBtn();
+        }
+        return;
+    }
+
+    // Execute swap
+    if (!swapQuoteData) return;
+
+    btn.textContent = 'Swapping...';
+    btn.disabled = true;
+
+    try {
+        const result = await swapConnector.invokeContract(swapQuoteData, null, true);
+        if (result && result.raw_data) {
+            await swapConnector.processInvokeData(result.raw_data);
+        }
+        btn.textContent = 'Swap Submitted!';
+        btn.style.background = 'var(--green)';
+        setTimeout(() => {
+            btn.style.background = '';
+            swapQuoteData = null;
+            document.getElementById('swapFromAmount').value = '';
+            document.getElementById('swapToAmount').value = '';
+            document.getElementById('swapQuoteInfo').style.display = 'none';
+            document.getElementById('swapPayUsd').textContent = '';
+            document.getElementById('swapReceiveUsd').textContent = '';
+            updateSwapBtn();
+        }, 3000);
+    } catch(e) {
+        console.error('Swap execution error:', e);
+        const msg = e.message || 'Swap Failed';
+        btn.textContent = msg.includes('cancelled') || msg.includes('rejected') ? 'Swap Cancelled' : 'Swap Failed';
+        btn.style.background = 'var(--red)';
+        setTimeout(() => {
+            btn.style.background = '';
+            updateSwapBtn();
+        }, 3000);
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/* Init                                                                      */
+/* ══════════════════════════════════════════════════════════════════════════ */
+async function init() {
+    await loadStats();
+    const hash = location.hash.replace('#', '');
+    if (hash.startsWith('pair/')) navigate('/pair/' + hash.replace('pair/', ''));
+    else navigate('/');
+    connectWS();
+    setInterval(loadStats, 30000);
+}
+
+init();
+</script>
+</body>
+</html>

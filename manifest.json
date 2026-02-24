@@ -1,0 +1,11 @@
+{
+    "name": "BeamScreener",
+    "description": "BEAM DEX Screener — Real-time token prices, charts, trades, and swap for BEAM confidential DEX",
+    "url": "localapp/app/index.html",
+    "icon": "localapp/app/appicon.svg",
+    "guid": "a7b3c9d1e5f2a8b4c6d0e7f1a2b3c4d5",
+    "major": 0,
+    "version": "1.0.0",
+    "api_version": "7.3",
+    "min_api_version": "7.3"
+}
