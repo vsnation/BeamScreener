@@ -65,8 +65,9 @@ table { width: 100%; border-collapse: collapse; }
 
 /* Stats Bar */
 .stats-bar { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 10px 0; }
-.stats-bar .container { display: flex; gap: 32px; overflow-x: auto; }
-.stat { white-space: nowrap; }
+.stats-bar .container { display: flex; overflow-x: auto; }
+.stat { white-space: nowrap; margin-right: 24px; padding-right: 24px; border-right: 1px solid var(--border); }
+.stat:last-child { margin-right: 0; padding-right: 0; border-right: none; }
 .stat-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-value { font-family: var(--mono); font-size: 15px; font-weight: 600; }
 
@@ -210,7 +211,7 @@ table { width: 100%; border-collapse: collapse; }
     .detail-right { border-top: 1px solid var(--border); width: 100%; }
 }
 @media (max-width: 768px) {
-    .stats-bar .container { gap: 20px; }
+    .stat { margin-right: 16px; padding-right: 16px; }
     .search-box { max-width: 200px; }
     #chart { min-height: 280px; }
     .hide-mobile { display: none; }
@@ -225,7 +226,7 @@ table { width: 100%; border-collapse: collapse; }
     .search-box { max-width: none; flex: 1; }
     .search-box input { font-size: 12px; padding: 7px 10px 7px 32px; }
     .beam-price { font-size: 12px; }
-    .stats-bar .container { gap: 16px; }
+    .stat { margin-right: 12px; padding-right: 12px; }
     .stat-value { font-size: 13px; }
     .stat-label { font-size: 10px; }
     .hide-tablet { display: none !important; }
@@ -302,7 +303,8 @@ table { width: 100%; border-collapse: collapse; }
     .search-box::before { font-size: 12px; left: 8px; }
     .beam-price { font-size: 11px; gap: 4px; }
     .stats-bar { padding: 8px 0; }
-    .stats-bar .container { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; overflow-x: visible; }
+    .stats-bar .container { display: grid; grid-template-columns: 1fr 1fr; overflow-x: visible; }
+    .stat { margin: 4px 0; padding-right: 0; border-right: none; }
     .stat { white-space: normal; }
     .hide-sm { display: none !important; }
     .pairs-table th { padding: 6px 4px; }
@@ -452,7 +454,7 @@ table { width: 100%; border-collapse: collapse; }
 /* State                                                                     */
 /* ══════════════════════════════════════════════════════════════════════════ */
 const PROD_API = 'https://buybeam.my/dashboard';
-const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? location.origin : PROD_API;
+const API = PROD_API;
 let currentPage = '/';
 let currentPairId = null;
 let currentPair = null;
@@ -469,6 +471,9 @@ let activeInterval = '1h';
 let priceMode = 'native'; // 'native' or 'usd'
 let beamUsd = 0;
 let rawCandles = []; // store raw candle data for price mode switching
+let chartOldestTime = null;  // Oldest candle timestamp loaded (for scroll-back)
+let chartLoading = false;    // Prevent concurrent lazy-load fetches
+let activeTradesTab = 'trades'; // 'trades' or 'lp'
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* Utilities                                                                 */
@@ -583,13 +588,7 @@ async function apiFetch(path) {
 /* WebSocket                                                                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function connectWS() {
-    let wsUrl;
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${proto}//${location.host}/ws`;
-    } else {
-        wsUrl = 'wss://buybeam.my/dashboard/ws';
-    }
+    const wsUrl = 'wss://buybeam.my/dashboard/ws';
     ws = new WebSocket(wsUrl);
     ws.onopen = () => {
         wsReconnectDelay = 1000;
@@ -624,18 +623,37 @@ function updatePairRow(event) {
 function prependTrade(trade) {
     const tbody = document.getElementById('tradesBody');
     if (!tbody || !currentPair) return;
+
+    // Filter by active tab
+    const kind = trade.kind || 'Trade';
+    if (activeTradesTab === 'trades' && kind !== 'Trade') return;
+    if (activeTradesTab === 'lp' && kind !== 'Deposit' && kind !== 'Withdraw') return;
+
     const tr = document.createElement('tr');
-    const isBuy = trade.side === 'buy';
     const s1 = currentPair.symbol1, s2 = currentPair.symbol2;
     const dateStr = window.innerWidth <= 640 ? fmtDate(trade.timestamp) : fmtDateFull(trade.timestamp);
-    tr.innerHTML = `
-        <td title="${fmtDateFull(trade.timestamp)}">${dateStr}</td>
-        <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
-        <td>${fmt$(trade.price_usd)}</td>
-        <td>${fmtAmount(trade.amount_in)}</td>
-        <td>${fmtAmount(trade.amount_out)}</td>
-        <td>${fmt$(trade.value_usd)}</td>
-    `;
+
+    if (activeTradesTab === 'lp') {
+        const isDeposit = kind === 'Deposit';
+        const badge = isDeposit ? '<span class="buy-badge">Deposit</span>' : '<span class="sell-badge">Withdraw</span>';
+        tr.innerHTML = `
+            <td title="${fmtDateFull(trade.timestamp)}">${dateStr}</td>
+            <td>${badge}</td>
+            <td>${fmtAmount(trade.amount_in)}</td>
+            <td>${fmtAmount(trade.amount_out)}</td>
+            <td>${fmt$(trade.value_usd)}</td>
+        `;
+    } else {
+        const isBuy = trade.side === 'buy';
+        tr.innerHTML = `
+            <td title="${fmtDateFull(trade.timestamp)}">${dateStr}</td>
+            <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
+            <td>${fmt$(trade.price_usd)}</td>
+            <td>${fmtAmount(trade.amount_in)}</td>
+            <td>${fmtAmount(trade.amount_out)}</td>
+            <td>${fmt$(trade.value_usd)}</td>
+        `;
+    }
     tbody.insertBefore(tr, tbody.firstChild);
     if (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
 }
@@ -678,6 +696,7 @@ function navigate(path) {
     } else if (path.startsWith('/pair/')) {
         currentPage = '/pair';
         currentPairId = path.replace('/pair/', '');
+        activeTradesTab = 'trades';
         window.location.hash = `pair/${currentPairId}`;
         document.querySelector('.stats-bar').style.display = 'none';
         document.querySelector('.page').className = 'page';
@@ -829,11 +848,12 @@ async function renderPairDetail(pairId) {
 
             <div class="trades-panel">
                 <div class="tab-bar">
-                    <button class="active">Transactions</button>
+                    <button class="active" onclick="switchTradesTab('trades', this)">Trades</button>
+                    <button onclick="switchTradesTab('lp', this)">LP</button>
                 </div>
                 <div class="trades-wrap">
                     <table class="trades-table">
-                        <thead><tr>
+                        <thead id="tradesHead"><tr>
                             <th>Date</th>
                             <th>Type</th>
                             <th>Price USD</th>
@@ -1028,7 +1048,13 @@ async function loadChart(pairId, interval) {
         borderVisible: false,
     });
 
+    // Track oldest candle for scroll-back lazy loading
+    chartOldestTime = rawCandles.length > 0 ? rawCandles[0].time : null;
+    chartLoading = false;
+
     applyPriceMode();
+    // Zoom out to show all candles by default
+    chart.timeScale().fitContent();
     updateChartLegend(rawCandles.length ? rawCandles[rawCandles.length - 1] : null);
 
     chart.subscribeCrosshairMove((param) => {
@@ -1040,6 +1066,28 @@ async function loadChart(pairId, interval) {
         // Find the candle matching this timestamp
         const candle = rawCandles.find(c => c.time === param.time);
         if (candle) updateChartLegend(candle);
+    });
+
+    // Lazy-load older candles when user scrolls to left edge
+    chart.timeScale().subscribeVisibleLogicalRangeChange(async (logicalRange) => {
+        if (!logicalRange || chartLoading || !chartOldestTime) return;
+        if (logicalRange.from < 10) {
+            chartLoading = true;
+            try {
+                const data = await apiFetch(
+                    `/api/pairs/${currentPairId}/ohlcv?interval=${activeInterval}&limit=500&to=${chartOldestTime}`
+                );
+                if (data && data.candles && data.candles.length > 0) {
+                    const oldCandles = data.candles.filter(c => c.time < chartOldestTime);
+                    if (oldCandles.length > 0) {
+                        rawCandles = [...oldCandles, ...rawCandles];
+                        chartOldestTime = rawCandles[0].time;
+                        applyPriceModeKeepPosition();
+                    }
+                }
+            } catch(e) { console.error('Scroll-back load error:', e); }
+            chartLoading = false;
+        }
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -1134,6 +1182,34 @@ function applyPriceMode() {
     chart.timeScale().fitContent();
 }
 
+function applyPriceModeKeepPosition() {
+    // Same as applyPriceMode but preserves scroll position (no fitContent)
+    if (!rawCandles.length || !lineSeries) return;
+
+    const mul = (priceMode === 'usd' && beamUsd > 0) ? beamUsd : 1;
+    const label = priceMode === 'usd' ? 'USD' : (currentPair ? currentPair.symbol1 : 'BEAM');
+
+    const lineData = rawCandles.map(c => ({ time: c.time, value: c.close * mul }));
+    const volumes = rawCandles.map((c, i) => {
+        const prevClose = i > 0 ? rawCandles[i-1].close : c.open;
+        const up = c.close >= prevClose;
+        return {
+            time: c.time,
+            value: c.volume / 1e8,
+            color: up ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)',
+        };
+    });
+
+    lineSeries.setData(lineData);
+    volumeSeries.setData(volumes);
+
+    if (priceMode === 'usd') {
+        lineSeries.applyOptions({ priceFormat: { type: 'custom', formatter: p => '$' + fmtPriceSub(p) } });
+    } else {
+        lineSeries.applyOptions({ priceFormat: { type: 'custom', formatter: p => fmtPriceSub(p) + ' ' + label } });
+    }
+}
+
 function setPriceMode(mode) {
     priceMode = mode;
     document.querySelectorAll('#priceToggle button').forEach(btn => {
@@ -1147,47 +1223,93 @@ function changeInterval(iv) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/* Trades with ticker names in columns + full date                           */
+/* Trades / LP tab switching + rendering                                     */
 /* ══════════════════════════════════════════════════════════════════════════ */
+function switchTradesTab(tab, btn) {
+    activeTradesTab = tab;
+    document.querySelectorAll('.trades-panel .tab-bar button').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    // Update table headers based on tab
+    const thead = document.getElementById('tradesHead');
+    const s1 = currentPair ? currentPair.symbol1 : '?';
+    const s2 = currentPair ? currentPair.symbol2 : '?';
+    if (thead) {
+        if (tab === 'lp') {
+            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>${s1}</th><th>${s2}</th><th>Value</th></tr>`;
+        } else {
+            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>Price USD</th><th>${s1}</th><th>${s2}</th><th>Value</th></tr>`;
+        }
+    }
+
+    if (currentPairId) loadTrades(currentPairId);
+}
+
 async function loadTrades(pairId) {
-    const data = await apiFetch(`/api/pairs/${pairId}/trades?limit=50`);
+    const kindParam = activeTradesTab === 'lp' ? '&kind=lp' : '&kind=Trade';
+    const data = await apiFetch(`/api/pairs/${pairId}/trades?limit=50${kindParam}`);
     const tbody = document.getElementById('tradesBody');
     if (!tbody) return;
 
+    const colSpan = activeTradesTab === 'lp' ? 5 : 6;
+
     if (!data || !data.trades || !data.trades.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">No trades yet</td></tr>';
+        const label = activeTradesTab === 'lp' ? 'No LP events yet' : 'No trades yet';
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="empty">${label}</td></tr>`;
         return;
     }
 
     const s1 = currentPair ? currentPair.symbol1 : '?';
     const s2 = currentPair ? currentPair.symbol2 : '?';
-
     const dec1 = currentPair ? (currentPair.decimals1 || 8) : 8;
     const dec2 = currentPair ? (currentPair.decimals2 || 8) : 8;
-
     const isMobile = window.innerWidth <= 640;
-    tbody.innerHTML = data.trades.map(t => {
-        const isBuy = t.side === 'buy';
-        // Determine which asset is which based on aid_in and format with correct decimals
-        let col1Val, col2Val;
-        if (t.aid_in === (currentPair ? currentPair.aid1 : 0)) {
-            col1Val = fmtAmount(t.amount_in, dec1);
-            col2Val = fmtAmount(t.amount_out, dec2);
-        } else {
-            col1Val = fmtAmount(t.amount_out, dec1);
-            col2Val = fmtAmount(t.amount_in, dec2);
-        }
-        const dateStr = isMobile ? fmtDate(t.timestamp) : fmtDateFull(t.timestamp);
 
-        return `<tr>
-            <td style="color:var(--text-3)" title="${fmtDateFull(t.timestamp)}">${dateStr}</td>
-            <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
-            <td>${fmt$(t.price_usd)}</td>
-            <td>${col1Val}</td>
-            <td>${col2Val}</td>
-            <td>${fmt$(t.value_usd)}</td>
-        </tr>`;
-    }).join('');
+    if (activeTradesTab === 'lp') {
+        tbody.innerHTML = data.trades.map(t => {
+            const isDeposit = t.kind === 'Deposit';
+            let col1Val, col2Val;
+            if (t.aid_in === (currentPair ? currentPair.aid1 : 0)) {
+                col1Val = fmtAmount(t.amount_in, dec1);
+                col2Val = fmtAmount(t.amount_out, dec2);
+            } else {
+                col1Val = fmtAmount(t.amount_out, dec1);
+                col2Val = fmtAmount(t.amount_in, dec2);
+            }
+            const dateStr = isMobile ? fmtDate(t.timestamp) : fmtDateFull(t.timestamp);
+            const badge = isDeposit
+                ? '<span class="buy-badge">Deposit</span>'
+                : '<span class="sell-badge">Withdraw</span>';
+            return `<tr>
+                <td style="color:var(--text-3)" title="${fmtDateFull(t.timestamp)}">${dateStr}</td>
+                <td>${badge}</td>
+                <td>${col1Val}</td>
+                <td>${col2Val}</td>
+                <td>${fmt$(t.value_usd)}</td>
+            </tr>`;
+        }).join('');
+    } else {
+        tbody.innerHTML = data.trades.map(t => {
+            const isBuy = t.side === 'buy';
+            let col1Val, col2Val;
+            if (t.aid_in === (currentPair ? currentPair.aid1 : 0)) {
+                col1Val = fmtAmount(t.amount_in, dec1);
+                col2Val = fmtAmount(t.amount_out, dec2);
+            } else {
+                col1Val = fmtAmount(t.amount_out, dec1);
+                col2Val = fmtAmount(t.amount_in, dec2);
+            }
+            const dateStr = isMobile ? fmtDate(t.timestamp) : fmtDateFull(t.timestamp);
+            return `<tr>
+                <td style="color:var(--text-3)" title="${fmtDateFull(t.timestamp)}">${dateStr}</td>
+                <td><span class="${isBuy ? 'buy-badge' : 'sell-badge'}">${isBuy ? 'Buy' : 'Sell'}</span></td>
+                <td>${fmt$(t.price_usd)}</td>
+                <td>${col1Val}</td>
+                <td>${col2Val}</td>
+                <td>${fmt$(t.value_usd)}</td>
+            </tr>`;
+        }).join('');
+    }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -1208,6 +1330,9 @@ async function loadStats() {
 /* Swap Panel — DappConnector integration                                    */
 /* ══════════════════════════════════════════════════════════════════════════ */
 const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+const WRAPPER_CID = '602569ee0ce1c77bce54235c6546e2be9225fe351bb82355483385a83c9ec1b6';
+let ammShader = null;    // DEX app shader (for quotes via pools_view / pool_trade predict)
+let wrapperShader = null; // Swap contract app shader
 let swapConnector = null;
 let swapDirection = 'buy'; // 'buy' = pay aid1(BEAM) → receive aid2(token), 'sell' = pay aid2 → receive aid1
 let swapQuoteTimer = null;
@@ -1219,6 +1344,34 @@ let swapToSymbol = '';
 let swapPairKind = 2;
 let swapFromLogo = '';
 let swapToLogo = '';
+
+async function loadAmmShader() {
+    if (ammShader) return ammShader;
+    try {
+        const resp = await fetch('shaders/amm_app.wasm');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        ammShader = new Uint8Array(buf);
+        console.log('[shader] AMM shader loaded:', ammShader.length, 'bytes');
+    } catch(e) {
+        console.error('[shader] Failed to load AMM shader:', e);
+    }
+    return ammShader;
+}
+
+async function loadWrapperShader() {
+    if (wrapperShader) return wrapperShader;
+    try {
+        const resp = await fetch('shaders/app.wasm');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        wrapperShader = new Uint8Array(buf);
+        console.log('[shader] Wrapper shader loaded:', wrapperShader.length, 'bytes');
+    } catch(e) {
+        console.error('[shader] Failed to load wrapper shader:', e);
+    }
+    return wrapperShader;
+}
 
 function initSwapPanel(pair) {
     if (!pair) return;
@@ -1336,18 +1489,17 @@ function estimateSwapLocal(amount) {
     const r2 = currentPair.reserve2_human || 0;
     if (r1 <= 0 || r2 <= 0) return null;
 
-    let receiveEst, feeEst;
+    let receiveEst;
     if (swapFromAid === currentPair.aid1) {
         // Pay aid1, receive aid2: dy = r2 * dx / (r1 + dx)
         receiveEst = r2 * amount / (r1 + amount);
-        feeEst = receiveEst * 0.013;
     } else {
         // Pay aid2, receive aid1: dx = r1 * dy / (r2 + dy)
         receiveEst = r1 * amount / (r2 + amount);
-        feeEst = receiveEst * 0.013;
     }
-    receiveEst -= feeEst;
-    return { receive: receiveEst, fee: feeEst };
+    // Apply DEX fee estimate
+    receiveEst *= 0.997;
+    return { receive: receiveEst };
 }
 
 async function fetchSwapQuote(amount) {
@@ -1384,41 +1536,54 @@ async function fetchSwapQuote(amount) {
     if (btn) { btn.textContent = 'Fetching quote...'; btn.disabled = true; }
 
     try {
-        // DEX convention: user always PAYS callAid2, BUYS callAid1
-        // val2_pay = how much of callAid2 user pays
-        // val1_buy = 0 means "calculate how much I get"
+        // Step 1: Get DEX quote (predict only) using AMM shader
+        // DEX convention: user PAYS callAid2, BUYS callAid1
         let callAid1, callAid2;
         const poolAid1 = currentPair.aid1;
         const poolAid2 = currentPair.aid2;
 
         if (swapFromAid === poolAid2) {
-            // User pays pool's aid2 → keep pool order
             callAid1 = poolAid1;
             callAid2 = poolAid2;
         } else {
-            // User pays pool's aid1 → swap order so paying asset is aid2
             callAid1 = poolAid2;
             callAid2 = poolAid1;
         }
 
-        const args = `action=pool_trade,cid=${DEX_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=0,val2_pay=${groth},bPredictOnly=1`;
+        const dexArgs = `action=pool_trade,cid=${DEX_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=0,val2_pay=${groth},bPredictOnly=1`;
 
-        const result = await swapConnector.invokeContract(args);
+        // Step 1: DEX quote via AMM shader
+        await loadAmmShader();
+        let buyGrth = 0, payGrth = groth;
+        let dexQuoteOk = false;
 
-        // Parse response: DEX returns {res: {buy, pay, pay_raw, fee_pool, fee_dao}}
-        let output = result;
-        if (result?.output) {
-            try { output = JSON.parse(result.output); } catch(e) { output = result; }
+        try {
+            const result = await swapConnector.invokeContract(dexArgs, ammShader);
+            console.log('[swap] DEX quote result:', result);
+
+            let output = result;
+            if (result?.output) {
+                try { output = JSON.parse(result.output); } catch(e) { output = result; }
+            }
+            const res = output?.res || output;
+            if (res && res.buy !== undefined) {
+                buyGrth = res.buy || 0;
+                payGrth = res.pay || groth;
+                dexQuoteOk = true;
+            }
+        } catch(e) {
+            console.warn('[swap] DEX quote failed, using local estimate:', e);
         }
-        const res = output?.res || output;
 
-        if (res && res.buy !== undefined) {
-            const buyGrth = res.buy || 0;
-            const payGrth = res.pay || groth;
-            const feeGrth = res.fee_pool || 0;
+        // Fallback to local estimate if DEX quote failed
+        if (!dexQuoteOk && localEst && localEst.receive > 0) {
+            buyGrth = Math.floor(localEst.receive * 1e8);
+            payGrth = groth;
+        }
 
+        if (buyGrth > 0) {
             const receiveHuman = buyGrth / 1e8;
-            document.getElementById('swapToAmount').value = receiveHuman >= 1 ? receiveHuman.toFixed(4) : receiveHuman.toFixed(8);
+            document.getElementById('swapToAmount').value = (dexQuoteOk ? '' : '~') + (receiveHuman >= 1 ? receiveHuman.toFixed(4) : receiveHuman.toFixed(8));
 
             // USD hint for receive
             if (swapToAid === 0 && beamUsd > 0) {
@@ -1435,12 +1600,15 @@ async function fetchSwapQuote(amount) {
 
             document.getElementById('swapQuoteInfo').style.display = 'block';
 
-            // Store execute args: same aid order, same pay amount, bPredictOnly=0
-            swapQuoteData = `action=pool_trade,cid=${DEX_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=0,val2_pay=${payGrth},bPredictOnly=0`;
+            // Store wrapper execute args for the actual swap (bPredictOnly=0)
+            swapQuoteData = `action=pool_trade,cid=${WRAPPER_CID},aid1=${callAid1},aid2=${callAid2},kind=${swapPairKind},val1_buy=${buyGrth},val2_pay=${payGrth},bPredictOnly=0`;
         }
     } catch(e) {
         console.error('Swap quote error:', e);
-        document.getElementById('swapToAmount').value = 'Error';
+        // Don't overwrite local estimate if it was already shown
+        if (!localEst || localEst.receive <= 0) {
+            document.getElementById('swapToAmount').value = 'Error';
+        }
         swapQuoteData = null;
     }
 
@@ -1492,11 +1660,7 @@ async function handleSwapClick() {
     btn.textContent = 'Swapping...';
     btn.disabled = true;
 
-    try {
-        const result = await swapConnector.invokeContract(swapQuoteData, null, true);
-        if (result && result.raw_data) {
-            await swapConnector.processInvokeData(result.raw_data);
-        }
+    const onSuccess = () => {
         btn.textContent = 'Swap Submitted!';
         btn.style.background = 'var(--green)';
         setTimeout(() => {
@@ -1509,15 +1673,59 @@ async function handleSwapClick() {
             document.getElementById('swapReceiveUsd').textContent = '';
             updateSwapBtn();
         }, 3000);
-    } catch(e) {
+    };
+
+    const onError = (e) => {
         console.error('Swap execution error:', e);
         const msg = e.message || 'Swap Failed';
         btn.textContent = msg.includes('cancelled') || msg.includes('rejected') ? 'Swap Cancelled' : 'Swap Failed';
         btn.style.background = 'var(--red)';
-        setTimeout(() => {
-            btn.style.background = '';
-            updateSwapBtn();
-        }, 3000);
+        setTimeout(() => { btn.style.background = ''; updateSwapBtn(); }, 3000);
+    };
+
+    try {
+        // Execute via swap contract
+        await loadWrapperShader();
+        console.log('[swap] Executing via wrapper:', swapQuoteData);
+        const result = await swapConnector.invokeContract(swapQuoteData, wrapperShader, false);
+        console.log('[swap] Wrapper invoke result:', result);
+        if (result?.raw_data) {
+            await swapConnector.processInvokeData(result.raw_data);
+            onSuccess();
+        } else if (result?.error) {
+            throw new Error(typeof result.error === 'string' ? result.error : result.error.message || 'Wrapper error');
+        } else {
+            throw new Error('No raw_data from wrapper');
+        }
+    } catch(wrapperErr) {
+        const msg = wrapperErr.message || '';
+        // If user cancelled, don't fallback
+        if (msg.includes('cancelled') || msg.includes('rejected')) {
+            onError(wrapperErr);
+            return;
+        }
+        console.warn('[swap] Wrapper failed:', wrapperErr.message || wrapperErr, '— trying direct DEX fallback');
+
+        // Fallback: direct DEX trade (no fee collection)
+        try {
+            await loadAmmShader();
+            const dexArgs = swapQuoteData
+                .replace(`cid=${WRAPPER_CID}`, `cid=${DEX_CID}`)
+                .replace(/,val1_buy=\d+/, ',val1_buy=0');
+            console.log('[swap] Fallback DEX execute:', dexArgs);
+            const dexResult = await swapConnector.invokeContract(dexArgs, ammShader, false);
+            console.log('[swap] DEX invoke result:', dexResult);
+            if (dexResult?.raw_data) {
+                await swapConnector.processInvokeData(dexResult.raw_data);
+                onSuccess();
+            } else if (dexResult?.error) {
+                throw new Error(typeof dexResult.error === 'string' ? dexResult.error : dexResult.error.message || 'DEX error');
+            } else {
+                throw new Error('No raw_data from DEX');
+            }
+        } catch(dexErr) {
+            onError(dexErr);
+        }
     }
 }
 
@@ -1531,6 +1739,46 @@ async function init() {
     else navigate('/');
     connectWS();
     setInterval(loadStats, 30000);
+
+    // Auto-connect wallet when running inside BEAM Wallet (desktop or mobile)
+    const isInsideWallet = /QtWebEngine/i.test(navigator.userAgent)
+        || typeof qt !== 'undefined'
+        || !!window.BEAM
+        || /beam.*wallet/i.test(navigator.userAgent);
+    if (isInsideWallet) {
+        try {
+            swapConnector = new BeamDappConnector({
+                appName: 'BeamScreener',
+                autoReconnect: true,
+                showLoader: false,
+                debug: true
+            });
+            swapConnector.on('connected', () => {
+                console.log('[wallet] Connected to BEAM wallet');
+                updateSwapBtn();
+                const input = document.getElementById('swapFromAmount');
+                if (input && parseFloat(input.value) > 0) onSwapInput();
+            });
+            swapConnector.on('disconnected', () => updateSwapBtn());
+            await swapConnector.connect();
+            loadAmmShader(); // pre-load DEX shader for quotes
+            loadWrapperShader().then(async (ws) => {
+                // Diagnostic: verify wrapper contract state is accessible
+                if (ws && swapConnector.isConnected()) {
+                    try {
+                        const vp = await swapConnector.invokeContract(
+                            `action=view_params,cid=${WRAPPER_CID}`, ws, false
+                        );
+                        console.log('[wrapper] view_params:', vp);
+                    } catch(e) {
+                        console.error('[wrapper] view_params failed — contract may not be accessible:', e);
+                    }
+                }
+            });
+        } catch(e) {
+            console.error('[wallet] Auto-connect failed:', e);
+        }
+    }
 }
 
 init();
