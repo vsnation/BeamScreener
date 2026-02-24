@@ -452,7 +452,7 @@ table { width: 100%; border-collapse: collapse; }
 /* State                                                                     */
 /* ══════════════════════════════════════════════════════════════════════════ */
 const PROD_API = 'https://buybeam.my/dashboard';
-const API = (location.protocol === 'file:' || location.hostname === 'buybeam.my') ? PROD_API : location.origin;
+const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? location.origin : PROD_API;
 let currentPage = '/';
 let currentPairId = null;
 let currentPair = null;
@@ -584,11 +584,11 @@ async function apiFetch(path) {
 /* ══════════════════════════════════════════════════════════════════════════ */
 function connectWS() {
     let wsUrl;
-    if (location.protocol === 'file:' || location.hostname === 'buybeam.my') {
-        wsUrl = 'wss://buybeam.my/dashboard/ws';
-    } else {
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${proto}//${location.host}/ws`;
+    } else {
+        wsUrl = 'wss://buybeam.my/dashboard/ws';
     }
     ws = new WebSocket(wsUrl);
     ws.onopen = () => {
