@@ -562,12 +562,32 @@ function fmtAmount(v, dec = 8) {
     return n.toFixed(Math.min(dec, 6));
 }
 
+/** Text from asset metadata, made safe for innerHTML. */
+function esc(v) {
+    return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/** Only http(s) image URLs. */
+function safeImgUrl(u) {
+    const t = String(u == null ? '' : u).trim();
+    if (!t) return '';
+    try {
+        const p = new URL(t, window.location.href);
+        return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : '';
+    } catch (e) { return ''; }
+}
+
 function iconHtml(logo, symbol, size = 28) {
     const initials = (symbol || '??').slice(0, 2).toUpperCase();
     if (logo) {
-        return `<div class="icon" style="width:${size}px;height:${size}px"><img src="${logo}" onerror="this.onerror=null;this.parentElement.textContent='${initials}'"></div>`;
+        return `<div class="icon" style="width:${size}px;height:${size}px"><img src="${esc(safeImgUrl(logo))}" data-initials="${esc(initials)}" onerror="this.onerror=null;this.parentElement.textContent=this.dataset.initials"></div>`;
     }
-    return `<div class="icon" style="width:${size}px;height:${size}px;font-size:${Math.floor(size/2.5)}px">${initials}</div>`;
+    return `<div class="icon" style="width:${size}px;height:${size}px;font-size:${Math.floor(size/2.5)}px">${esc(initials)}</div>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -768,7 +788,7 @@ function renderPairsTable() {
             <td class="hide-tablet" style="color:var(--text-3)">${i + 1}</td>
             <td><div class="pair-cell">
                 <div class="pair-icons">${iconHtml(p.logo1, p.symbol1)}${iconHtml(p.logo2, p.symbol2)}</div>
-                <div class="pair-name">${p.symbol1}/${p.symbol2} <small>#${p.aid2}</small></div>
+                <div class="pair-name">${esc(p.symbol1)}/${esc(p.symbol2)} <small>#${p.aid2}</small></div>
             </div></td>
             <td class="mono price-cell">${fmt$(p.price_usd)}</td>
             <td class="hide-mobile">${fmtPct(p.price_change_1h)}</td>
@@ -823,7 +843,7 @@ async function renderPairDetail(pairId) {
                     ${iconHtml(pair.logo2, s2, 32)}
                 </div>
                 <div>
-                    <div class="topbar-title">${s1} / ${s2}</div>
+                    <div class="topbar-title">${esc(s1)} / ${esc(s2)}</div>
                     <div class="topbar-subtitle">BEAM DEX</div>
                 </div>
             </div>
@@ -838,7 +858,7 @@ async function renderPairDetail(pairId) {
                     <div class="separator"></div>
                     <div class="price-toggle" id="priceToggle">
                         <button class="${priceMode==='usd'?'active':''}" onclick="setPriceMode('usd')">USD</button>
-                        <button class="${priceMode==='native'?'active':''}" onclick="setPriceMode('native')">${s1}</button>
+                        <button class="${priceMode==='native'?'active':''}" onclick="setPriceMode('native')">${esc(s1)}</button>
                     </div>
                 </div>
                 <div id="chart">
@@ -857,8 +877,8 @@ async function renderPairDetail(pairId) {
                             <th>Date</th>
                             <th>Type</th>
                             <th>Price USD</th>
-                            <th>${s1}</th>
-                            <th>${s2}</th>
+                            <th>${esc(s1)}</th>
+                            <th>${esc(s2)}</th>
                             <th>Value</th>
                         </tr></thead>
                         <tbody id="tradesBody">
@@ -874,11 +894,11 @@ async function renderPairDetail(pairId) {
             <div class="sidebar-price">
                 <div class="price-row">
                     <span class="price-label">PRICE USD</span>
-                    <span class="price-label">PRICE ${s1}</span>
+                    <span class="price-label">PRICE ${esc(s1)}</span>
                 </div>
                 <div class="price-row">
                     <span class="price-val">${fmt$(pair.price_usd)}</span>
-                    <span class="price-native">${fmtPrice(pair.price_native)} ${s1}</span>
+                    <span class="price-native">${fmtPrice(pair.price_native)} ${esc(s1)}</span>
                 </div>
             </div>
 
@@ -910,11 +930,11 @@ async function renderPairDetail(pairId) {
             <div class="pool-section">
                 <h4>Pooled Tokens</h4>
                 <div class="pool-row">
-                    <span class="lbl">${iconHtml(pair.logo1, s1, 18)} ${s1} <span class="pool-aid">#${pair.aid1}</span></span>
+                    <span class="lbl">${iconHtml(pair.logo1, s1, 18)} ${esc(s1)} <span class="pool-aid">#${pair.aid1}</span></span>
                     <span class="val">${fmtNum(reserve1Human, 2)}<span class="usd">${fmt$(reserve1Usd)}</span></span>
                 </div>
                 <div class="pool-row">
-                    <span class="lbl">${iconHtml(pair.logo2, s2, 18)} ${s2} <span class="pool-aid">#${pair.aid2}</span></span>
+                    <span class="lbl">${iconHtml(pair.logo2, s2, 18)} ${esc(s2)} <span class="pool-aid">#${pair.aid2}</span></span>
                     <span class="val">${fmtNum(reserve2Human, 2)}<span class="usd">${fmt$(reserve2Usd)}</span></span>
                 </div>
             </div>
@@ -923,7 +943,7 @@ async function renderPairDetail(pairId) {
                 <h4>Pair Info</h4>
                 <div class="pool-row"><span class="lbl">Pair ID</span><span class="val" style="font-size:11px">${pair.pair_id}</span></div>
                 <div class="pool-row"><span class="lbl">LP Token</span><span class="val">Asset #${pair.lp_token}</span></div>
-                <div class="pool-row"><span class="lbl">Rate</span><span class="val">1 ${s1} = ${fmtPrice(pair.rate_2_1)} ${s2}</span></div>
+                <div class="pool-row"><span class="lbl">Rate</span><span class="val">1 ${esc(s1)} = ${fmtPrice(pair.rate_2_1)} ${esc(s2)}</span></div>
             </div>
 
             <!-- Swap Panel -->
@@ -939,7 +959,7 @@ async function renderPairDetail(pairId) {
                         <input type="text" class="swap-input" id="swapFromAmount" placeholder="0" inputmode="decimal" oninput="onSwapInput()">
                         <div class="swap-token-badge" id="swapFromToken">
                             ${iconHtml(pair.logo1, s1, 20)}
-                            <span class="swap-sym">${s1}</span>
+                            <span class="swap-sym">${esc(s1)}</span>
                             <span class="swap-aid">#${pair.aid1}</span>
                         </div>
                     </div>
@@ -958,7 +978,7 @@ async function renderPairDetail(pairId) {
                         <input type="text" class="swap-input" id="swapToAmount" placeholder="0" readonly>
                         <div class="swap-token-badge" id="swapToToken">
                             ${iconHtml(pair.logo2, s2, 20)}
-                            <span class="swap-sym">${s2}</span>
+                            <span class="swap-sym">${esc(s2)}</span>
                             <span class="swap-aid">#${pair.aid2}</span>
                         </div>
                     </div>
@@ -1120,7 +1140,7 @@ function updateChartLegend(candle) {
 
     if (window.innerWidth <= 640) {
         el.innerHTML = `
-            <div class="legend-title">${s1}/${s2} &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
+            <div class="legend-title">${esc(s1)}/${esc(s2)} &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
                 <span class="legend-ohlc">
                     <span class="val">${fp(c)}</span>
                     <span class="chg ${chgCls}">${chgSign}${change.toFixed(2)}%</span>
@@ -1128,7 +1148,7 @@ function updateChartLegend(candle) {
             </div>`;
     } else {
         el.innerHTML = `
-            <div class="legend-title">${s1}/${s2} on BEAM DEX &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
+            <div class="legend-title">${esc(s1)}/${esc(s2)} on BEAM DEX &middot; ${activeInterval} &nbsp;<span style="color:${dot}">&bull;</span>
                 <span class="legend-ohlc">
                     <span class="lbl">O</span><span class="val">${fp(o)}</span>
                     <span class="lbl">H</span><span class="val">${fp(h)}</span>
@@ -1236,9 +1256,9 @@ function switchTradesTab(tab, btn) {
     const s2 = currentPair ? currentPair.symbol2 : '?';
     if (thead) {
         if (tab === 'lp') {
-            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>${s1}</th><th>${s2}</th><th>Value</th></tr>`;
+            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>${esc(s1)}</th><th>${esc(s2)}</th><th>Value</th></tr>`;
         } else {
-            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>Price USD</th><th>${s1}</th><th>${s2}</th><th>Value</th></tr>`;
+            thead.innerHTML = `<tr><th>Date</th><th>Type</th><th>Price USD</th><th>${esc(s1)}</th><th>${esc(s2)}</th><th>Value</th></tr>`;
         }
     }
 
@@ -1431,8 +1451,8 @@ function flipSwapDirection() {
     // Update token badges
     const fromToken = document.getElementById('swapFromToken');
     const toToken = document.getElementById('swapToToken');
-    if (fromToken) fromToken.innerHTML = `${iconHtml(swapFromLogo, swapFromSymbol, 20)}<span class="swap-sym">${swapFromSymbol}</span><span class="swap-aid">#${swapFromAid}</span>`;
-    if (toToken) toToken.innerHTML = `${iconHtml(swapToLogo, swapToSymbol, 20)}<span class="swap-sym">${swapToSymbol}</span><span class="swap-aid">#${swapToAid}</span>`;
+    if (fromToken) fromToken.innerHTML = `${iconHtml(swapFromLogo, swapFromSymbol, 20)}<span class="swap-sym">${esc(swapFromSymbol)}</span><span class="swap-aid">#${swapFromAid}</span>`;
+    if (toToken) toToken.innerHTML = `${iconHtml(swapToLogo, swapToSymbol, 20)}<span class="swap-sym">${esc(swapToSymbol)}</span><span class="swap-aid">#${swapToAid}</span>`;
 
     // Move from amount to the new from, clear receive
     const fromInput = document.getElementById('swapFromAmount');
